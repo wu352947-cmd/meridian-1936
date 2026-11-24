@@ -1,0 +1,83 @@
+/* Meridian 1936 — Wartime Cartography & Dispatch Archive Design Tokens */
+:root {
+  /* Map surfaces */
+  --map-paper-base: #EAE2D3;
+  --map-sea-deep: #2B3D4F;
+  --map-sea-coastal: #435B6E;
+  --map-ink-coast: #2C2621;
+  --map-ink-border: #1E1A17;
+  --map-ink-prov: #6E655C;
+  --map-river-major: #3B5C76;
+
+  /* Terrain palette */
+  --terrain-plains: #E5DEC9;
+  --terrain-forest: #6F8260;
+  --terrain-hills: #B59E7A;
+  --terrain-mountain: #6E5A4B;
+  --terrain-marsh: #6B7D78;
+  --terrain-urban: #A65E52;
+  --terrain-desert: #D8C394;
+
+  /* UI walnut, brass & paper surfaces */
+  --ui-bg-panel: rgba(30, 28, 26, 0.94);
+  --ui-bg-panel-solid: #1E1C1A;
+  --ui-bg-elevated: #2A2724;
+  --ui-bg-btn: #2C2824;
+  --ui-bg-btn-hover: #3A342E;
+  --ui-paper-card: #F4EFE6;
+  --ui-paper-ink: #221F1D;
+  --ui-text-primary: #F2ECE1;
+  --ui-text-secondary: #C6BCAD;
+  --ui-text-muted: #9A9082;
+  --ui-border-brass: #6E5D42;
+  --ui-border-gold: #C5A059;
+  --ui-status-positive: #4E8A57;
+  --ui-status-warning: #C8933E;
+  --ui-status-danger: #B83A2D;
+
+  /* Typography */
+  --font-display: 'MeridianWenKai', 'LXGW WenKai Screen', 'Noto Serif CJK SC', 'Songti SC', serif;
+  --font-sans: 'MeridianSans', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'MeridianMono', 'JetBrains Mono', ui-monospace, 'Consolas', monospace;
+  --font-latin-serif: 'MeridianCinzel', 'Cinzel', Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--map-sea-deep);
+  color: var(--ui-text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#map-root {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+}
+
+#ui-root {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

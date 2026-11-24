@@ -1,0 +1,11 @@
+node_modules/
+dist/
+ref/
+refs-internal/
+*.log
+.cache/
+shots-tmp/
+data/raw/
+logs-local/
+__pycache__/
+*.pyc

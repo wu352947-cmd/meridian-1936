@@ -1,0 +1,199 @@
+import { BufferImageSource, Shader, TextureSource } from 'pixi.js';
+
+export const PROVINCE_LUT_VERT = /* glsl */ `
+precision highp float;
+
+attribute vec2 aPosition;
+attribute vec2 aUV;
+
+varying vec2 vUV;
+
+uniform mat3 uProjectionMatrix;
+uniform mat3 uWorldTransformMatrix;
+uniform mat3 uTransformMatrix;
+
+void main() {
+  vUV = aUV;
+  mat3 mvp = uProjectionMatrix * uWorldTransformMatrix * uTransformMatrix;
+  gl_Position = vec4((mvp * vec3(aPosition, 1.0)).xy, 0.0, 1.0);
+}
+`;
+
+export const PROVINCE_LUT_FRAG = /* glsl */ `
+precision highp float;
+
+varying vec2 vUV;
+
+uniform sampler2D uProvIdTex;
+uniform sampler2D uReliefTex;
+uniform sampler2D uPrimaryLut;
+uniform sampler2D uSecondaryLut;
+
+uniform vec2 uMapSize;
+uniform float uZoom;
+uniform float uMode; // 0=political, 1=terrain, 2=diplomacy, 3=industry
+
+float decodeId(vec4 raw) {
+  float r = floor(raw.r * 255.0 + 0.5);
+  float g = floor(raw.g * 255.0 + 0.5);
+  return r + g * 256.0;
+}
+
+float sampleOwner(vec2 uv) {
+  vec4 idRaw = texture2D(uProvIdTex, clamp(uv, 0.0, 1.0));
+  float pid = decodeId(idRaw);
+  float u = (pid + 0.5) / 4096.0;
+  return texture2D(uSecondaryLut, vec2(u, 0.5)).r;
+}
+
+void main() {
+  vec4 idRaw = texture2D(uProvIdTex, vUV);
+  float provId = decodeId(idRaw);
+  float coastDist = idRaw.b; // 0..1 normalized distance from coast
+  float lutU = (provId + 0.5) / 4096.0;
+
+  vec4 prim = texture2D(uPrimaryLut, vec2(lutU, 0.5));
+  vec4 sec = texture2D(uSecondaryLut, vec2(lutU, 0.5));
+  vec3 relief = texture2D(uReliefTex, vUV).rgb;
+
+  bool isSea = prim.a < 0.5;
+  float myOwner = sec.r;
+  bool isSelCountry = sec.g > 0.5;
+  bool isSelProv = sec.b > 0.5;
+  bool isHoverProv = sec.a > 0.5;
+
+  if (isSea) {
+    // Antique nautical chart ocean: relief bathymetry + coastal shelf wash + dual ripple rings
+    vec3 col = relief;
+    float dPx = coastDist * 96.0;
+    float shelf = exp(-dPx / 22.0);
+    vec3 shallowTint = vec3(0.285, 0.388, 0.462);
+    col = mix(col, shallowTint, shelf * 0.28);
+
+    // Subtle engraved double coastal hachure lines
+    float ring1 = smoothstep(1.4, 0.0, abs(dPx - 5.5)) * 0.16;
+    float ring2 = smoothstep(1.6, 0.0, abs(dPx - 12.5)) * 0.09;
+    float ring3 = smoothstep(1.8, 0.0, abs(dPx - 21.0)) * 0.05;
+    col += vec3(0.68, 0.78, 0.84) * (ring1 + ring2 + ring3);
+
+    if (isHoverProv) {
+      col = mix(col, vec3(0.56, 0.69, 0.78), 0.18);
+    }
+    if (isSelProv) {
+      col = mix(col, vec3(0.74, 0.64, 0.45), 0.22);
+    }
+    gl_FragColor = vec4(col, 1.0);
+    return;
+  }
+
+  // Land: detect proximity to international border / coastline across 2 rings for watercolor inner wash
+  vec2 px = 1.0 / uMapSize;
+  float rInner = clamp(4.5 / sqrt(max(uZoom, 0.45)), 2.0, 6.5);
+  float rOuter = clamp(12.5 / sqrt(max(uZoom, 0.45)), 5.5, 16.0);
+
+  float diffInner = 0.0;
+  float diffOuter = 0.0;
+
+  // 8 directional taps at inner & outer radii
+  vec2 d0 = vec2(1.0, 0.0);
+  vec2 d1 = vec2(-1.0, 0.0);
+  vec2 d2 = vec2(0.0, 1.0);
+  vec2 d3 = vec2(0.0, -1.0);
+  vec2 d4 = vec2(0.707, 0.707);
+  vec2 d5 = vec2(-0.707, 0.707);
+  vec2 d6 = vec2(0.707, -0.707);
+  vec2 d7 = vec2(-0.707, -0.707);
+
+  diffInner += step(0.002, abs(sampleOwner(vUV + d0 * rInner * px) - myOwner));
+  diffInner += step(0.002, abs(sampleOwner(vUV + d1 * rInner * px) - myOwner));
+  diffInner += step(0.002, abs(sampleOwner(vUV + d2 * rInner * px) - myOwner));
+  diffInner += step(0.002, abs(sampleOwner(vUV + d3 * rInner * px) - myOwner));
+  diffInner += step(0.002, abs(sampleOwner(vUV + d4 * rInner * px) - myOwner));
+  diffInner += step(0.002, abs(sampleOwner(vUV + d5 * rInner * px) - myOwner));
+  diffInner += step(0.002, abs(sampleOwner(vUV + d6 * rInner * px) - myOwner));
+  diffInner += step(0.002, abs(sampleOwner(vUV + d7 * rInner * px) - myOwner));
+
+  diffOuter += step(0.002, abs(sampleOwner(vUV + d0 * rOuter * px) - myOwner));
+  diffOuter += step(0.002, abs(sampleOwner(vUV + d1 * rOuter * px) - myOwner));
+  diffOuter += step(0.002, abs(sampleOwner(vUV + d2 * rOuter * px) - myOwner));
+  diffOuter += step(0.002, abs(sampleOwner(vUV + d3 * rOuter * px) - myOwner));
+  diffOuter += step(0.002, abs(sampleOwner(vUV + d4 * rOuter * px) - myOwner));
+  diffOuter += step(0.002, abs(sampleOwner(vUV + d5 * rOuter * px) - myOwner));
+  diffOuter += step(0.002, abs(sampleOwner(vUV + d6 * rOuter * px) - myOwner));
+  diffOuter += step(0.002, abs(sampleOwner(vUV + d7 * rOuter * px) - myOwner));
+
+  float edgeNear = clamp(diffInner / 3.0, 0.0, 1.0);
+  float edgeWide = clamp(diffOuter / 4.5, 0.0, 1.0);
+  float borderBand = clamp(edgeNear * 0.72 + edgeWide * 0.42, 0.0, 1.0);
+
+  // Watercolor fill alpha: crisp mineral pigment near international border (0.82), luminous interior (0.42)
+  float baseAlpha = mix(0.42, 0.82, borderBand);
+  vec3 reliefBase = relief;
+
+  if (uMode > 0.5 && uMode < 1.5) {
+    // Terrain mode: heightened Alps/Carpathian hillshade relief + organic topographic wash
+    reliefBase = clamp((relief - 0.5) * 1.48 + 0.52, 0.0, 1.0);
+    baseAlpha = mix(0.44, 0.58, borderBand);
+  } else if (uMode >= 1.5) {
+    // Diplomacy & industry modes: crisp thematic choropleth clarity
+    baseAlpha = mix(0.50, 0.80, borderBand);
+  }
+
+  // Gentle mineral chroma lift + paper multiply blend so relief mountain shadows breathe cleanly
+  vec3 pigment = prim.rgb;
+  float luma = dot(pigment, vec3(0.299, 0.587, 0.114));
+  vec3 vividPigment = clamp(mix(vec3(luma), pigment, 1.14), 0.0, 1.0);
+  vec3 multiplied = reliefBase * mix(vec3(1.0), vividPigment * 1.18, baseAlpha);
+  vec3 alphaMixed = mix(reliefBase, vividPigment, baseAlpha * 0.84);
+  vec3 col = mix(alphaMixed, multiplied, 0.40);
+
+  // Subtle ink darkening right along the inner international frontier
+  col *= (1.0 - edgeNear * 0.07);
+
+  // Selected country soft vermilion inner edge glow (#B83A2D)
+  if (isSelCountry) {
+    vec3 vermilion = vec3(0.722, 0.227, 0.176);
+    col = mix(col, vermilion, edgeNear * 0.44);
+    col = mix(col, col + vec3(0.055, 0.045, 0.030), 0.35);
+  }
+
+  // Hovered province gentle parchment highlight
+  if (isHoverProv) {
+    col = mix(col, vec3(0.96, 0.93, 0.86), 0.22);
+  }
+
+  // Selected province crisp subtle warm lift
+  if (isSelProv) {
+    col = mix(col, vec3(0.95, 0.90, 0.80), 0.18);
+  }
+
+  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
+`;
+
+export function createProvinceLutShader(
+  provIdSource: BufferImageSource,
+  reliefSource: TextureSource,
+  primaryLutSource: BufferImageSource,
+  secondaryLutSource: BufferImageSource,
+  mapWidth: number,
+  mapHeight: number,
+): Shader {
+  return Shader.from({
+    gl: {
+      vertex: PROVINCE_LUT_VERT,
+      fragment: PROVINCE_LUT_FRAG,
+    },
+    resources: {
+      uProvIdTex: provIdSource,
+      uReliefTex: reliefSource,
+      uPrimaryLut: primaryLutSource,
+      uSecondaryLut: secondaryLutSource,
+      mapUniforms: {
+        uMapSize: { value: [mapWidth, mapHeight], type: 'vec2<f32>' },
+        uZoom: { value: 1.0, type: 'f32' },
+        uMode: { value: 0.0, type: 'f32' },
+      },
+    },
+  });
+}

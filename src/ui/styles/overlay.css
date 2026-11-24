@@ -1,0 +1,396 @@
+/* Meridian 1936 — Batch 01 Minimal Cartographic Overlay (Walnut, Aged Brass & Archival Linen) */
+
+.meridian-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-sans);
+}
+
+.cartouche-title {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--ui-bg-panel);
+  border: 1px solid var(--ui-border-brass);
+  border-radius: 4px;
+  padding: 8px 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(4px);
+}
+
+.cartouche-title h1 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ui-text-primary);
+  line-height: 1.2;
+}
+
+.cartouche-subtitle {
+  font-size: 11px;
+  color: var(--ui-text-secondary);
+  margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+
+.cartouche-divider {
+  width: 1px;
+  height: 26px;
+  background: rgba(197, 160, 89, 0.35);
+}
+
+.staff-btn {
+  background: var(--ui-bg-btn);
+  color: var(--ui-text-primary);
+  border: 1px solid var(--ui-border-brass);
+  border-radius: 3px;
+  padding: 5px 11px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.staff-btn:hover {
+  background: var(--ui-bg-btn-hover);
+  border-color: var(--ui-border-gold);
+}
+
+.staff-btn:active {
+  transform: translateY(1px);
+}
+
+.staff-btn.active {
+  background: #3D3326;
+  border-color: var(--ui-border-gold);
+  color: #F8E7BE;
+  box-shadow: inset 0 0 0 1px rgba(197, 160, 89, 0.35);
+}
+
+/* Top-right compact thematic map legend (terrain / diplomacy / industry) */
+.mode-legend {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  pointer-events: auto;
+  background: var(--ui-bg-panel);
+  border: 1px solid var(--ui-border-brass);
+  border-radius: 4px;
+  padding: 7px 11px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.36);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  max-width: 340px;
+  font-size: 11.5px;
+  color: var(--ui-text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+/* Bottom-center map mode dock */
+.mode-dock {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ui-bg-panel);
+  border: 1px solid var(--ui-border-brass);
+  border-radius: 5px;
+  padding: 6px 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.42);
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.mode-key {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ui-text-muted);
+  border: 1px solid rgba(110, 93, 66, 0.6);
+  border-radius: 2px;
+  padding: 0 4px;
+  line-height: 1.5;
+}
+
+.mode-btn.active .mode-key {
+  color: var(--ui-border-gold);
+  border-color: var(--ui-border-gold);
+}
+
+/* Bottom-right zoom & LOD control */
+.zoom-dock {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--ui-bg-panel);
+  border: 1px solid var(--ui-border-brass);
+  border-radius: 5px;
+  padding: 6px 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.42);
+}
+
+.zoom-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0 6px;
+  line-height: 1.25;
+}
+
+.zoom-lod {
+  font-size: 11px;
+  color: var(--ui-border-gold);
+  letter-spacing: 0.04em;
+}
+
+.zoom-val {
+  font-size: 11px;
+  color: var(--ui-text-secondary);
+}
+
+.zoom-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Bottom-left hover / selected province card (archival linen & brass) */
+.prov-card {
+  position: fixed;
+  bottom: 18px;
+  left: 18px;
+  width: 296px;
+  pointer-events: auto;
+  background: var(--ui-bg-panel);
+  border: 1px solid var(--ui-border-brass);
+  border-radius: 5px;
+  padding: 11px 13px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.46);
+}
+
+.prov-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(110, 93, 66, 0.45);
+}
+
+.prov-flag {
+  width: 36px;
+  height: 24px;
+  border-radius: 2px;
+  border: 1px solid rgba(234, 226, 211, 0.35);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  flex-shrink: 0;
+}
+
+.prov-title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.prov-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.prov-name-zh {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ui-text-primary);
+}
+
+.prov-name-en {
+  font-size: 11px;
+  color: var(--ui-text-muted);
+}
+
+.prov-owner-row {
+  font-size: 12px;
+  color: var(--ui-text-secondary);
+  margin-top: 2px;
+}
+
+.prov-badge-sel {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: rgba(184, 58, 45, 0.28);
+  border: 1px solid #B83A2D;
+  color: #F4C3BC;
+  white-space: nowrap;
+}
+
+.prov-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  margin-top: 9px;
+  font-size: 12px;
+}
+
+.prov-kv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--ui-bg-elevated);
+  border-radius: 3px;
+  padding: 4px 8px;
+}
+
+.prov-k {
+  color: var(--ui-text-muted);
+  font-size: 11px;
+}
+
+.prov-v {
+  color: var(--ui-text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.terrain-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.prov-desc {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ui-text-secondary);
+}
+
+/* Credits & About modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+  background: rgba(16, 14, 12, 0.68);
+  display: grid;
+  place-items: center;
+  z-index: 40;
+}
+
+.credits-modal {
+  width: min(680px, 92vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ui-paper-card);
+  color: var(--ui-paper-ink);
+  border: 2px solid var(--ui-border-brass);
+  border-radius: 5px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.credits-head {
+  background: var(--ui-bg-panel-solid);
+  color: var(--ui-text-primary);
+  padding: 13px 18px;
+  border-bottom: 2px solid var(--ui-border-gold);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.credits-head h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 0.05em;
+}
+
+.credits-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.credits-note {
+  background: rgba(184, 58, 45, 0.08);
+  border-left: 3px solid #B83A2D;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+}
+
+.license-item {
+  border-bottom: 1px solid rgba(110, 93, 66, 0.25);
+  padding: 9px 0;
+}
+
+.license-item:last-child {
+  border-bottom: none;
+}
+
+.license-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.license-title {
+  font-weight: 600;
+  color: #1E1A17;
+}
+
+.license-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: #2A2724;
+  color: #E8D5A8;
+  padding: 1px 6px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.license-meta {
+  font-size: 12px;
+  color: #4E4740;
+  margin-top: 2px;
+}
+
+.license-meta a {
+  color: #2B5278;
+  text-decoration: underline;
+}
