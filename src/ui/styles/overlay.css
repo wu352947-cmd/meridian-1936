@@ -224,7 +224,8 @@
 .prov-name-row {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 2px 6px;
 }
 
 .prov-name-zh {
@@ -232,11 +233,16 @@
   font-size: 16px;
   font-weight: 600;
   color: var(--ui-text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .prov-name-en {
   font-size: 11px;
   color: var(--ui-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .prov-owner-row {

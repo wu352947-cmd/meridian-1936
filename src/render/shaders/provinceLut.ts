@@ -46,6 +46,10 @@ float sampleOwner(vec2 uv) {
   return texture2D(uSecondaryLut, vec2(u, 0.5)).r;
 }
 
+float sampleProvId(vec2 uv) {
+  return decodeId(texture2D(uProvIdTex, clamp(uv, 0.0, 1.0)));
+}
+
 void main() {
   vec4 idRaw = texture2D(uProvIdTex, vUV);
   float provId = decodeId(idRaw);
@@ -77,10 +81,10 @@ void main() {
     col += vec3(0.68, 0.78, 0.84) * (ring1 + ring2 + ring3);
 
     if (isHoverProv) {
-      col = mix(col, vec3(0.56, 0.69, 0.78), 0.18);
+      col = clamp(col * vec3(1.13, 1.15, 1.17) + vec3(0.018, 0.026, 0.032), 0.0, 1.0);
     }
     if (isSelProv) {
-      col = mix(col, vec3(0.74, 0.64, 0.45), 0.22);
+      col = mix(col, vec3(0.76, 0.58, 0.42), 0.22);
     }
     gl_FragColor = vec4(col, 1.0);
     return;
@@ -150,21 +154,33 @@ void main() {
   // Subtle ink darkening right along the inner international frontier
   col *= (1.0 - edgeNear * 0.07);
 
-  // Selected country soft vermilion inner edge glow (#B83A2D)
-  if (isSelCountry) {
-    vec3 vermilion = vec3(0.722, 0.227, 0.176);
-    col = mix(col, vermilion, edgeNear * 0.44);
-    col = mix(col, col + vec3(0.055, 0.045, 0.030), 0.35);
+  // Selected country: ultra-subtle warm presence (NO heavy red wash on other provinces!)
+  if (isSelCountry && !isSelProv) {
+    col = clamp(col * vec3(1.03, 1.025, 1.015), 0.0, 1.0);
   }
 
-  // Hovered province gentle parchment highlight
+  // Hovered province: texture-preserving parchment & brass lift (keeps linen weave + mountain hillshade)
   if (isHoverProv) {
-    col = mix(col, vec3(0.96, 0.93, 0.86), 0.22);
+    vec3 lifted = col * vec3(1.14, 1.12, 1.07) + reliefBase * vec3(0.055, 0.048, 0.030);
+    col = mix(col, clamp(lifted, 0.0, 1.0), 0.85);
   }
 
-  // Selected province crisp subtle warm lift
+  // Selected province: soft vermilion inner edge glow (#B83A2D) + relief-preserving warm lift
   if (isSelProv) {
-    col = mix(col, vec3(0.95, 0.90, 0.80), 0.18);
+    float rSel = clamp(4.0 / sqrt(max(uZoom, 0.5)), 1.8, 5.5);
+    float diffProv = 0.0;
+    diffProv += step(0.5, abs(sampleProvId(vUV + d0 * rSel * px) - provId));
+    diffProv += step(0.5, abs(sampleProvId(vUV + d1 * rSel * px) - provId));
+    diffProv += step(0.5, abs(sampleProvId(vUV + d2 * rSel * px) - provId));
+    diffProv += step(0.5, abs(sampleProvId(vUV + d3 * rSel * px) - provId));
+    diffProv += step(0.5, abs(sampleProvId(vUV + d4 * rSel * px) - provId));
+    diffProv += step(0.5, abs(sampleProvId(vUV + d5 * rSel * px) - provId));
+    diffProv += step(0.5, abs(sampleProvId(vUV + d6 * rSel * px) - provId));
+    diffProv += step(0.5, abs(sampleProvId(vUV + d7 * rSel * px) - provId));
+    float selEdge = clamp(diffProv / 3.2, 0.0, 1.0);
+    vec3 lifted = col * vec3(1.08, 1.05, 1.01) + reliefBase * vec3(0.032, 0.024, 0.014);
+    col = clamp(lifted, 0.0, 1.0);
+    col = mix(col, vec3(0.75, 0.25, 0.19), selEdge * 0.42);
   }
 
   gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);

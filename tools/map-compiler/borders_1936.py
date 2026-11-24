@@ -30,8 +30,34 @@ def _clean_poly(g):
     return g
 
 
-def _keep_significant(g, min_area: float = 12.0):
+def _remove_tiny_holes(g, max_hole_area: float = 180.0):
     g = _clean_poly(g)
+    if g.is_empty:
+        return g
+    polys = [g] if g.geom_type == "Polygon" else list(g.geoms)
+    cleaned = []
+    for p in polys:
+        if p.geom_type != "Polygon":
+            continue
+        kept_holes = [r for r in p.interiors if Polygon(r).area >= max_hole_area]
+        cleaned.append(Polygon(p.exterior, kept_holes))
+    return _clean_poly(unary_union(cleaned)) if cleaned else Polygon()
+
+
+def _weld_country(gs: list) -> object:
+    """Union modern admin pieces and close sub-pixel reassembly seams/sliver holes."""
+    if not gs:
+        return Polygon()
+    u = _clean_poly(unary_union(gs))
+    if u.is_empty:
+        return u
+    # Tiny morphological closing welds modern-border micro-gaps (e.g. Kaliningrad/Warmia, Bessarabia, Kresy)
+    closed = u.buffer(0.65, join_style=2, mitre_limit=2.0).buffer(-0.65, join_style=2, mitre_limit=2.0)
+    return _remove_tiny_holes(closed, max_hole_area=180.0)
+
+
+def _keep_significant(g, min_area: float = 12.0):
+    g = _remove_tiny_holes(g, max_hole_area=180.0)
     if g.is_empty:
         return g
     if g.geom_type == "Polygon":
@@ -83,6 +109,8 @@ def build_1936_geometries():
             tag = "POL"
         elif a0 == "BGR" and iso in ("BG-08", "BG-19"):
             tag = "ROM"
+        elif a0 == "MDA" and iso == "MD-SN":
+            tag = "SOV"
         elif a0 == "MAR" and iso == "MA-01":
             tag = "SPR"
         by_tag.setdefault(tag, []).append(g)
@@ -104,57 +132,69 @@ def build_1936_geometries():
         tag = ADM0_TO_1936.get(a0, "EDG")
         by_tag.setdefault(tag, []).append(g)
 
-    # Remove Lake Ladoga / Onega / Peipus / Balaton / Geneva / Constance? Keep clean land!
-    countries = {t: _clean_poly(unary_union(gs)) for t, gs in by_tag.items()}
+    # Weld modern admin-0/admin-1 pieces seamlessly (closes micro-cracks in East Prussia, Kresy, Bessarabia, YUG, etc.)
+    countries = {t: _weld_country(gs) for t, gs in by_tag.items()}
 
-    # 3. Apply precise 1936 geometric historical border transfers
+    # 3. Apply natural multi-vertex 1936 geometric historical border transfers
     # 3a. Free City of Danzig (DNZ) — historic 1920-1939 territory
     danzig_mask = _poly_ll([
-        (18.42, 54.48), (19.46, 54.46), (19.46, 54.12),
-        (18.92, 54.02), (18.42, 54.14), (18.38, 54.36),
+        (18.42, 54.48), (18.78, 54.42), (19.16, 54.38), (19.46, 54.44),
+        (19.44, 54.26), (19.32, 54.12), (19.04, 54.03), (18.80, 54.05),
+        (18.56, 54.11), (18.40, 54.22), (18.38, 54.36),
     ])
     # 3b. Pomeranian west-of-Corridor (Stolp/Köslin) -> GER, and Elbing east of Vistula -> GER
     west_pom_ger = _poly_ll([
-        (16.00, 55.00), (17.55, 54.90), (17.55, 53.65), (16.85, 53.30),
+        (16.00, 55.00), (17.56, 54.90), (17.64, 54.56), (17.44, 54.26),
+        (17.52, 53.95), (17.34, 53.66), (16.95, 53.44), (16.65, 53.26),
         (15.60, 53.30), (15.60, 55.00),
     ])
     elbing_ger = _poly_ll([
-        (18.92, 54.46), (20.10, 54.46), (20.10, 53.55), (18.88, 53.55), (18.88, 54.06),
+        (18.96, 54.46), (20.10, 54.46), (20.10, 53.55), (19.55, 53.58),
+        (19.18, 53.64), (18.88, 53.62), (18.92, 53.88), (18.90, 54.08),
     ])
-    # 3c. Polish Corridor exact western edge & Kresy Riga Treaty strip (east of Grodno/Brest to ~27.5E)
+    # 3c. Polish Kresy Riga Treaty strip (naturalized eastern border east of Grodno/Brest to ~27.5E)
     riga_kresy = _poly_ll([
-        (25.20, 55.85), (27.65, 55.65), (27.50, 54.35), (27.05, 52.80),
-        (27.35, 51.60), (26.20, 51.40), (24.50, 54.00),
+        (25.20, 55.85), (26.40, 55.76), (27.65, 55.65), (27.72, 55.05),
+        (27.46, 54.52), (27.22, 53.96), (27.36, 53.42), (27.08, 52.84),
+        (27.24, 52.20), (27.35, 51.60), (26.82, 51.45), (26.20, 51.40),
+        (25.10, 52.70), (24.50, 54.00),
     ])
     # 3d. Polish Vilnius expansion (eastern Alytus/Utena corridor connecting to Latvia)
     vilnius_ext = _poly_ll([
-        (24.75, 54.05), (26.65, 55.65), (27.20, 55.20), (25.60, 53.85),
+        (24.75, 54.05), (25.45, 54.68), (26.05, 55.18), (26.65, 55.65),
+        (27.20, 55.20), (26.40, 54.50), (25.60, 53.85),
     ])
     # 3e. Finland 1920 Tartu borders: Karelian Isthmus + Ladoga Karelia + Salla + Petsamo
     fin_karelia = _poly_ll([
-        (27.60, 60.45), (29.95, 60.15), (30.75, 60.55), (32.25, 61.55),
-        (31.50, 62.65), (30.20, 63.40), (28.00, 62.50),
+        (27.60, 60.45), (28.90, 60.22), (29.95, 60.16), (30.52, 60.38),
+        (30.92, 60.74), (31.65, 61.18), (32.22, 61.58), (31.95, 62.12),
+        (31.48, 62.65), (30.88, 63.05), (30.20, 63.40), (28.00, 62.50),
     ])
     fin_salla_petsamo = _poly_ll([
-        (28.50, 66.20), (30.40, 66.40), (30.40, 67.35), (28.80, 67.60),
+        (28.50, 66.20), (29.60, 66.28), (30.40, 66.45), (30.52, 66.90),
+        (30.36, 67.35), (29.55, 67.50), (28.80, 67.60),
     ])
     fin_petsamo = _poly_ll([
-        (28.50, 68.55), (31.65, 68.55), (32.35, 69.95), (30.80, 70.10), (28.50, 69.40),
+        (28.50, 68.55), (30.10, 68.52), (31.55, 68.62), (32.15, 69.28),
+        (32.35, 69.95), (30.80, 70.10), (28.50, 69.40),
     ])
     # 3f. Romania Budjak (Southern Bessarabia, west of Dniester estuary)
     rom_budjak = _poly_ll([
-        (28.10, 46.60), (30.48, 46.32), (29.90, 45.15), (28.10, 45.20),
+        (28.10, 46.60), (29.35, 46.48), (30.48, 46.32), (30.20, 45.70),
+        (29.90, 45.15), (28.10, 45.20),
     ])
     # 3g. Italian Istria & Dodecanese
     ita_istria = _poly_ll([
-        (13.20, 46.20), (14.42, 46.10), (14.52, 44.75), (13.30, 44.70),
+        (13.20, 46.20), (13.85, 46.16), (14.38, 46.06), (14.48, 45.42),
+        (14.52, 44.75), (13.30, 44.70),
     ])
     ita_dodecanese = _poly_ll([
         (26.25, 37.55), (28.45, 37.55), (28.45, 35.30), (26.25, 35.30),
     ])
     # 3h. Spanish Morocco Rif strip
     spr_rif = _poly_ll([
-        (-6.20, 35.95), (-2.15, 35.40), (-2.25, 34.85), (-6.15, 34.95),
+        (-6.20, 35.95), (-4.20, 35.68), (-2.15, 35.40), (-2.25, 34.85),
+        (-4.20, 34.90), (-6.15, 34.95),
     ])
 
     def transfer(src: str, dst: str, mask):
@@ -164,7 +204,7 @@ def build_1936_geometries():
         if piece.is_empty:
             return
         countries[src] = _clean_poly(countries[src].difference(piece))
-        countries[dst] = _clean_poly(unary_union([countries.get(dst, Polygon()), piece]))
+        countries[dst] = _weld_country([countries.get(dst, Polygon()), piece])
 
     transfer("POL", "GER", west_pom_ger)
     transfer("POL", "GER", elbing_ger)
@@ -178,8 +218,7 @@ def build_1936_geometries():
     transfer("GRE", "ITA", ita_dodecanese)
     transfer("FRA", "SPR", spr_rif)
 
-    # Subtract big inland lakes so Lake Ladoga / Onega / Vänern / Peipus look crisp
-    # Clean tiny dust slivers (< 6 px²) and resolve any overlap deterministically
+    # Clean tiny dust slivers (< 8 px²) and resolve any overlap deterministically
     ordered = sorted(countries.keys(), key=lambda t: (t != "DNZ", t != "LUX", t))
     claimed = Polygon()
     final_countries: dict[str, object] = {}
@@ -189,38 +228,12 @@ def build_1936_geometries():
             final_countries[t] = g
             claimed = _clean_poly(unary_union([claimed, g]))
 
-    # Fixed historical micro/named provinces to preserve verbatim during subdivision
+    # Fixed historical micro/named provinces (NEVER fix post-1945 straight cuts like RU-KGD or 1940 Karelia!)
     fixed_defs = [
         ("DNZ", "danzig", "但泽自由市", "Free City of Danzig", final_countries["DNZ"], "urban", 15, 8, True),
     ]
-    # Preserve Sudetenland 3 border zones inside CZE & Saarland inside GER & Polish Corridor & East Prussia Königsberg
     saar = _clean_poly(unary_union(adm1_cache.get("DE-SL", [])).intersection(final_countries["GER"]))
     if not saar.is_empty:
         fixed_defs.append(("GER", "saarland", "萨尔兰", "Saarland", saar, "hills", 5, 10, False))
-    koenigsberg = _clean_poly(unary_union(adm1_cache.get("RU-KGD", [])).intersection(final_countries["GER"]))
-    if not koenigsberg.is_empty:
-        fixed_defs.append(("GER", "koenigsberg", "柯尼斯堡", "Königsberg", koenigsberg, "urban", 12, 8, False))
-    corridor = _clean_poly(unary_union(adm1_cache.get("PL-PM", [])).intersection(final_countries["POL"]))
-    if not corridor.is_empty:
-        fixed_defs.append(("POL", "pomerelia", "波兰走廊", "Polish Corridor", corridor, "plains", 10, 6, False))
-    vilnius_p = _clean_poly(unary_union(adm1_cache.get("LT-VL", [])).intersection(final_countries["POL"]))
-    if not vilnius_p.is_empty:
-        fixed_defs.append(("POL", "wilno", "维尔诺", "Wilno", vilnius_p, "forest", 8, 5, False))
-    memel = _clean_poly(unary_union(adm1_cache.get("LT-KL", [])).intersection(final_countries["LIT"]))
-    if not memel.is_empty:
-        fixed_defs.append(("LIT", "memel", "梅梅尔", "Memel", memel, "plains", 5, 4, False))
-    kar_isthmus = _clean_poly(fin_karelia.intersection(final_countries["FIN"]))
-    if not kar_isthmus.is_empty:
-        fixed_defs.append(("FIN", "viipuri", "维堡卡累利阿", "Viipuri", kar_isthmus, "forest", 10, 5, False))
-    sudeten_w = _clean_poly(unary_union(adm1_cache.get("CZ-KA", []) + adm1_cache.get("CZ-US", [])).intersection(final_countries["CZE"]))
-    if not sudeten_w.is_empty:
-        fixed_defs.append(("CZE", "sudeten_west", "西苏台德", "West Sudetenland", sudeten_w, "mountain", 8, 9, False))
-    sudeten_n = _clean_poly(unary_union(adm1_cache.get("CZ-LI", []) + adm1_cache.get("CZ-KR", [])).intersection(final_countries["CZE"]))
-    if not sudeten_n.is_empty:
-        fixed_defs.append(("CZE", "sudeten_north", "北苏台德", "North Sudetenland", sudeten_n, "mountain", 8, 8, False))
-    bessarabia = _clean_poly(unary_union([
-        _poly_ll([(26.5, 48.5), (30.5, 48.5), (30.5, 45.2), (28.0, 45.2)]),
-    ]).intersection(final_countries["ROM"]))
-    # Keep Bessarabia split naturally within ROM (don't force giant 1-piece polygon); just tag city names!
 
     return final_countries, fixed_defs

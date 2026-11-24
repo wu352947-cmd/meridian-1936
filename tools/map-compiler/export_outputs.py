@@ -41,40 +41,46 @@ def _decode_topo_rings(topo: dict, arc_indices: list[int]) -> list[tuple[float, 
 
 def _rasterize_topojson(topo: dict, land_ids: set[int]) -> tuple[np.ndarray, dict[int, int]]:
     """Rasterize exact simplified TopoJSON polygons into (H, W) uint16 ID grid without AA."""
-    id_img = Image.new("I;16", (WIDTH, HEIGHT), 0)
-    draw = ImageDraw.Draw(id_img)
+    sea_img = Image.new("I;16", (WIDTH, HEIGHT), 0)
+    sea_draw = ImageDraw.Draw(sea_img)
+    land_img = Image.new("I;16", (WIDTH, HEIGHT), 0)
+    land_draw = ImageDraw.Draw(land_img)
     geoms = topo["objects"]["provinces"]["geometries"]
 
-    # Draw sea zones first, then land provinces on top so coastlines are razor crisp
-    ordered = sorted(geoms, key=lambda g: (0 if g["properties"]["isSea"] else 1, g["properties"]["id"]))
-    for g in ordered:
+    sea_geoms = [g for g in geoms if g["properties"]["isSea"]]
+    land_geoms = sorted(
+        [g for g in geoms if not g["properties"]["isSea"]],
+        key=lambda g: -float(g["properties"].get("areaPx", 0)),
+    )
+
+    for g in sea_geoms:
         pid = int(g["properties"]["id"])
-        gtype = g["type"]
-        poly_list = [g["arcs"]] if gtype == "Polygon" else (g["arcs"] if gtype == "MultiPolygon" else [])
+        poly_list = [g["arcs"]] if g["type"] == "Polygon" else (g["arcs"] if g["type"] == "MultiPolygon" else [])
         for rings in poly_list:
             if not rings:
                 continue
             outer = _decode_topo_rings(topo, rings[0])
             if len(outer) >= 3:
-                draw.polygon(outer, fill=pid)
-            # Carve holes back to 0 so nested enclaves / islands show through
+                sea_draw.polygon(outer, fill=pid)
+
+    # Draw larger land provinces first, smaller enclaves on top, carving holes back to 0 so underlying sea shows through
+    for g in land_geoms:
+        pid = int(g["properties"]["id"])
+        poly_list = [g["arcs"]] if g["type"] == "Polygon" else (g["arcs"] if g["type"] == "MultiPolygon" else [])
+        for rings in poly_list:
+            if not rings:
+                continue
+            outer = _decode_topo_rings(topo, rings[0])
+            if len(outer) >= 3:
+                land_draw.polygon(outer, fill=pid)
             for hole_arc in rings[1:]:
                 hole = _decode_topo_rings(topo, hole_arc)
                 if len(hole) >= 3:
-                    draw.polygon(hole, fill=0)
+                    land_draw.polygon(hole, fill=0)
 
-    # Re-draw smaller land provinces on top in case any enclave sat inside a hole
-    for g in ordered:
-        if not g["properties"]["isSea"] and g["properties"].get("areaPx", 9999) < 8000:
-            pid = int(g["properties"]["id"])
-            gtype = g["type"]
-            poly_list = [g["arcs"]] if gtype == "Polygon" else (g["arcs"] if gtype == "MultiPolygon" else [])
-            for rings in poly_list:
-                outer = _decode_topo_rings(topo, rings[0])
-                if len(outer) >= 3:
-                    draw.polygon(outer, fill=pid)
-
-    arr = np.array(id_img, dtype=np.uint16)
+    sea_arr = np.array(sea_img, dtype=np.uint16)
+    land_arr = np.array(land_img, dtype=np.uint16)
+    arr = np.where(land_arr > 0, land_arr, sea_arr)
 
     # Fill any 0-pixel seam via exact Euclidean nearest-neighbor Voronoi fill
     zero_mask = arr == 0
@@ -226,8 +232,8 @@ def export_all(land_provs: list[dict], sea_provs: list[dict], rivers: list[dict]
     cmd = [
         "npx", "--no-install", "mapshaper", str(tmp_geo),
         "name=provinces",
-        "-snap", "interval=0.25",
-        "-simplify", "visvalingam", "22%", "keep-shapes",
+        "-clean", "snap-interval=0.4", "gap-fill-area=25",
+        "-simplify", "visvalingam", "42%", "keep-shapes",
         "-o", "format=topojson", "quantization=1e5", str(topo_path),
     ]
     print("[mapshaper]", " ".join(cmd))
@@ -287,6 +293,8 @@ def export_all(land_provs: list[dict], sea_provs: list[dict], rivers: list[dict]
             rec["cityEn"] = p["cityEn"]
         if p.get("isCapital"):
             rec["isCapital"] = True
+        if p.get("hideMapLabel"):
+            rec["hideMapLabel"] = True
         prov_records.append(rec)
 
     meta = {

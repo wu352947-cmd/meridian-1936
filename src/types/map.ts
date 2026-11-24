@@ -30,6 +30,7 @@ export interface ProvinceRecord {
   cityZh?: string;
   cityEn?: string;
   isCapital?: boolean;
+  hideMapLabel?: boolean;
   neighbors: number[];
   straits?: number[];
 }

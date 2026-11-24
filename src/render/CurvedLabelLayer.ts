@@ -44,10 +44,24 @@ function tAtDist(lens: number[], target: number): number {
   return (lo + frac) / (lens.length - 1);
 }
 
+export interface ViewportRect {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  vw: number;
+  vh: number;
+}
+
 interface CountryLabelItem {
   curve: CountryLabelCurve;
+  bezier: QuadBezier;
+  lens: number[];
+  totalLen: number;
+  fontSize: number;
+  desiredStep: number;
   container: Container;
-  glyphBoxes: Array<{ wx: number; wy: number; half: number }>;
+  glyphs: Text[];
   minZoom: number;
   maxZoom: number;
 }
@@ -109,7 +123,7 @@ export class CurvedLabelLayer {
       const desiredStep = Math.min(fontSize * 1.48, (totalLen * 0.88) / Math.max(n, 1));
       const usedLen = desiredStep * (n - 1);
       const startDist = (totalLen - usedLen) * 0.5;
-      const glyphBoxes: Array<{ wx: number; wy: number; half: number }> = [];
+      const glyphs: Text[] = [];
 
       for (let i = 0; i < n; i++) {
         const dist = n === 1 ? totalLen * 0.5 : startDist + i * desiredStep;
@@ -120,13 +134,24 @@ export class CurvedLabelLayer {
         glyph.position.set(pos.x, pos.y);
         glyph.rotation = Math.max(-0.52, Math.min(0.52, pos.angle * 0.72));
         container.addChild(glyph);
-        glyphBoxes.push({ wx: pos.x, wy: pos.y, half: fontSize * 0.62 });
+        glyphs.push(glyph);
       }
 
       const minZoom = c.areaPx < 6000 ? 0.92 : c.areaPx < 14000 ? 0.58 : 0.35;
       const maxZoom = c.areaPx < 18000 ? 2.6 : 3.5;
       this.countryGroup.addChild(container);
-      this.countryItems.push({ curve: c, container, glyphBoxes, minZoom, maxZoom });
+      this.countryItems.push({
+        curve: c,
+        bezier: b,
+        lens,
+        totalLen,
+        fontSize,
+        desiredStep,
+        container,
+        glyphs,
+        minZoom,
+        maxZoom,
+      });
     }
   }
 
@@ -181,7 +206,7 @@ export class CurvedLabelLayer {
           baseWidth: textStr.length * 13 + 10,
           baseHeight: 17,
         });
-      } else {
+      } else if (!p.hideMapLabel) {
         const label = new Text({ text: p.nameZh, style: provStyle });
         label.anchor.set(0.5, 0.5);
         label.position.set(p.cx, p.cy);
@@ -207,9 +232,13 @@ export class CurvedLabelLayer {
     g.closePath();
   }
 
-  updateLod(zoom: number): void {
+  updateLod(zoom: number, view?: ViewportRect): void {
     const invScale = 1 / Math.max(0.45, zoom);
     const placed: Array<[number, number, number, number]> = [];
+    const vw = view?.vw ?? 1440;
+    const vh = view?.vh ?? 900;
+    const toScreenX = (wx: number) => (view ? (wx - view.minX) * zoom : wx * zoom);
+    const toScreenY = (wy: number) => (view ? (wy - view.minY) * zoom : wy * zoom);
 
     const overlaps = (x0: number, y0: number, x1: number, y1: number): boolean => {
       for (const [ax0, ay0, ax1, ay1] of placed) {
@@ -218,41 +247,114 @@ export class CurvedLabelLayer {
       return false;
     };
 
+    const inViewportSafe = (x0: number, y0: number, x1: number, y1: number, pad = 12): boolean => {
+      if (!view) return true;
+      if (x0 < pad || y0 < pad || x1 > vw - pad || y1 > vh - pad) return false;
+      // Avoid clipping under top-left title cartouche or top-right legend bar
+      if (x0 < 388 && y0 < 70) return false;
+      if (x1 > vw - 350 && y0 < 66) return false;
+      // Avoid bottom-center mode dock
+      if (x1 > vw * 0.5 - 220 && x0 < vw * 0.5 + 220 && y1 > vh - 58) return false;
+      return true;
+    };
+
     const tryPlace = (sx: number, sy: number, sw: number, sh: number): boolean => {
       const x0 = sx - sw * 0.5;
       const y0 = sy - sh * 0.5;
       const x1 = sx + sw * 0.5;
       const y1 = sy + sh * 0.5;
+      if (!inViewportSafe(x0, y0, x1, y1, 10)) return false;
       if (overlaps(x0, y0, x1, y1)) return false;
       placed.push([x0, y0, x1, y1]);
       return true;
     };
 
-    // 1. Country curved labels first; register their screen-space glyph AABBs so cities NEVER collide!
+    // 1. Country curved labels: entire name must fit cleanly inside viewport (or re-layout on visible sub-span)
     for (const item of this.countryItems) {
       if (zoom < item.minZoom || zoom >= item.maxZoom) {
         item.container.visible = false;
         continue;
       }
-      // Check if any glyph of this lower-priority country overlaps an already placed bigger country
-      const boxes: Array<[number, number, number, number]> = item.glyphBoxes.map((gb) => {
-        const hs = gb.half * zoom + 3;
-        return [gb.wx * zoom - hs, gb.wy * zoom - hs, gb.wx * zoom + hs, gb.wy * zoom + hs];
-      });
-      if (boxes.some(([x0, y0, x1, y1]) => overlaps(x0, y0, x1, y1))) {
+      const n = item.glyphs.length;
+      const halfPx = item.fontSize * 0.58 * zoom;
+
+      const placeAlongSpan = (
+        d0: number,
+        d1: number,
+        isSubSpan: boolean,
+      ): Array<{ wx: number; wy: number; angle: number; box: [number, number, number, number] }> | null => {
+        const span = d1 - d0;
+        const step = n <= 1 ? 0 : Math.min(item.desiredStep, span / Math.max(n - 1, 1));
+        if (isSubSpan && n > 1 && step < item.fontSize * 0.92) return null;
+        const used = step * (n - 1);
+        const start = d0 + (span - used) * 0.5;
+        const out: Array<{ wx: number; wy: number; angle: number; box: [number, number, number, number] }> = [];
+        for (let i = 0; i < n; i++) {
+          const dist = n === 1 ? (d0 + d1) * 0.5 : start + i * step;
+          const pos = evalBezier(item.bezier, tAtDist(item.lens, dist));
+          const sx = toScreenX(pos.x);
+          const sy = toScreenY(pos.y);
+          const box: [number, number, number, number] = [sx - halfPx - 3, sy - halfPx - 3, sx + halfPx + 3, sy + halfPx + 3];
+          if (!inViewportSafe(box[0], box[1], box[2], box[3], 14)) return null;
+          out.push({ wx: pos.x, wy: pos.y, angle: pos.angle, box });
+        }
+        return out;
+      };
+
+      // Try canonical full-curve placement first
+      let layout = placeAlongSpan(0, item.totalLen, false);
+      // If partially outside viewport, try longest contiguous visible segment of the curve
+      if (!layout && view) {
+        const samples = 28;
+        let bestA = 0;
+        let bestB = 0;
+        let curA = -1;
+        for (let s = 0; s <= samples; s++) {
+          const dist = (item.totalLen * s) / samples;
+          const pos = evalBezier(item.bezier, tAtDist(item.lens, dist));
+          const sx = toScreenX(pos.x);
+          const sy = toScreenY(pos.y);
+          const ok = inViewportSafe(sx - halfPx - 3, sy - halfPx - 3, sx + halfPx + 3, sy + halfPx + 3, 14);
+          if (ok && curA < 0) curA = dist;
+          if (!ok && curA >= 0) {
+            const prevD = (item.totalLen * (s - 1)) / samples;
+            if (prevD - curA > bestB - bestA) {
+              bestA = curA;
+              bestB = prevD;
+            }
+            curA = -1;
+          }
+        }
+        if (curA >= 0 && item.totalLen - curA > bestB - bestA) {
+          bestA = curA;
+          bestB = item.totalLen;
+        }
+        if (bestB - bestA > item.fontSize * Math.max(n - 1, 1) * 0.96) {
+          layout = placeAlongSpan(bestA, bestB, true);
+        }
+      }
+
+      if (!layout || layout.some((g) => overlaps(g.box[0], g.box[1], g.box[2], g.box[3]))) {
         item.container.visible = false;
         continue;
       }
+
+      for (let i = 0; i < n; i++) {
+        const g = item.glyphs[i]!;
+        const p = layout[i]!;
+        g.position.set(p.wx, p.wy);
+        g.rotation = Math.max(-0.52, Math.min(0.52, p.angle * 0.72));
+      }
+
       item.container.visible = true;
       const alpha = zoom < 2.15 ? 0.94 : Math.max(0.26, 0.94 - ((zoom - 2.15) / 1.35) * 0.68);
       item.container.alpha = alpha;
-      // Only block city/province labels when country text is clearly opaque (>0.45)
       if (alpha > 0.45) {
-        for (const box of boxes) placed.push(box);
+        for (const p of layout) placed.push(p.box);
       }
     }
 
-    // 2. City markers & smart 4-offset collision-free labels (never leave orphan dots without labels!)
+    // 2. City markers & smart 4-offset collision-free labels
     const markerScale = Math.max(0.32, Math.min(1.1, invScale * 0.95));
     const labelScale = Math.max(0.28, Math.min(1.1, invScale * 0.96));
 
@@ -263,8 +365,14 @@ export class CurvedLabelLayer {
         continue;
       }
 
-      const cx = item.prov.cx * zoom;
-      const cy = item.prov.cy * zoom;
+      const cx = toScreenX(item.prov.cx);
+      const cy = toScreenY(item.prov.cy);
+      if (view && (cx < -30 || cx > vw + 30 || cy < -30 || cy > vh + 30)) {
+        item.marker.visible = false;
+        item.label.visible = false;
+        continue;
+      }
+
       const offsets: Array<[number, number]> = [
         [0, 14],
         [0, -14],
@@ -295,8 +403,7 @@ export class CurvedLabelLayer {
           item.prov.cy + placedPos[1] / zoom,
         );
       } else {
-        // Show capital star even if label is blocked, hide non-capital orphan dots
-        item.marker.visible = Boolean(item.prov.isCapital);
+        item.marker.visible = Boolean(item.prov.isCapital) && inViewportSafe(cx - 8, cy - 8, cx + 8, cy + 8, 6);
         if (item.marker.visible) {
           item.marker.position.set(
             item.prov.cx * (1 - markerScale),
@@ -308,17 +415,17 @@ export class CurvedLabelLayer {
       }
     }
 
-    // 3. Province names at tactical/inspection zoom (LOD 2.3+) with strict zero-overlap
-    const showProvs = zoom >= 2.3;
+    // 3. Province names at tactical/inspection zoom (LOD 2.2+) with strict viewport containment & zero-overlap
+    const showProvs = zoom >= 2.2;
     this.provLabelGroup.visible = showProvs;
     if (showProvs) {
       for (const pl of this.provLabels) {
-        const sx = pl.prov.cx * zoom;
-        const sy = pl.prov.cy * zoom;
+        const sx = toScreenX(pl.prov.cx);
+        const sy = toScreenY(pl.prov.cy);
         if (tryPlace(sx, sy, pl.w, pl.h)) {
           pl.label.visible = true;
           pl.label.scale.set(labelScale);
-          pl.label.alpha = Math.min(0.86, (zoom - 2.3) * 0.9);
+          pl.label.alpha = Math.min(0.88, 0.44 + (zoom - 2.2) * 0.65);
         } else {
           pl.label.visible = false;
         }

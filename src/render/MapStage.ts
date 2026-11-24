@@ -190,7 +190,14 @@ export class MapStage {
 
     this.lutShader.resources.mapUniforms.uniforms.uZoom = this.zoom;
     this.borders.updateLod(this.zoom);
-    this.labels.updateLod(this.zoom);
+    this.labels.updateLod(this.zoom, {
+      minX: this.camX - halfW,
+      minY: this.camY - halfH,
+      maxX: this.camX + halfW,
+      maxY: this.camY + halfH,
+      vw,
+      vh,
+    });
     this.cbs.onCameraChange({ x: this.camX, y: this.camY, zoom: this.zoom });
   }
 
@@ -218,6 +225,7 @@ export class MapStage {
     this.selectedProvId = prov ? prov.id : null;
     this.selectedOwner = prov && !prov.isSea ? prov.owner : null;
     this.borders.setSelection(this.selectedOwner, this.selectedProvId);
+    this.borders.setHover(this.hoveredProvId);
     this.refreshLuts();
     this.cbs.onSelectProvince(prov);
   }
@@ -225,6 +233,7 @@ export class MapStage {
   hoverProvince(provId: number | null): void {
     if (this.hoveredProvId === provId) return;
     this.hoveredProvId = provId;
+    this.borders.setHover(this.hoveredProvId);
     this.refreshLuts();
     const prov = provId ? (this.provById.get(provId) ?? null) : null;
     this.cbs.onHoverProvince(prov);

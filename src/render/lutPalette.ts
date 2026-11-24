@@ -104,9 +104,9 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
       const c = COUNTRIES_1936[p.owner];
       rgb = hexToRgb(c?.color ?? '#B8B0A0');
     } else if (mode === 'terrain') {
-      // Soften urban fill in terrain mode so Alps/valley relief flows organically without harsh brick blocks
+      // Soften urban fill in terrain mode so macro terrain relief reads organically without bright pink patches
       if (p.terrain === 'urban') {
-        rgb = [194, 154, 134];
+        rgb = [204, 178, 152];
       } else {
         const t = TERRAIN_INFO[p.terrain];
         rgb = hexToRgb(t?.color ?? '#E5DEC9');

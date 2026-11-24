@@ -9,6 +9,7 @@ import shapefile
 from PIL import Image
 from shapely.geometry import LineString, Point, Polygon, box, shape
 from shapely.ops import transform as shp_transform, unary_union
+from shapely.strtree import STRtree
 
 from config_1936 import (
     RAW_DIR, WIDTH, HEIGHT, RELIEF_W, RELIEF_H, COUNTRY_NAMES_ZH,
@@ -16,15 +17,68 @@ from config_1936 import (
 )
 from names_zh import CITY_ZH
 from names_zh_east import CITY_ZH_EXTRA
+from names_zh_towns_west import TOWNS_WEST_ZH
+from names_zh_towns_east import TOWNS_EAST_ZH
 
 
 def _norm_city(s: str) -> str:
+    s = re.sub(r"[\u200e\u200f\ufeff]", "", s)
     s = re.sub(r"\s+", " ", s.strip().lower())
+    s = (
+        s.replace("ø", "o")
+        .replace("ß", "ss")
+        .replace("ı", "i")
+        .replace("ł", "l")
+        .replace("đ", "d")
+        .replace("ð", "d")
+        .replace("þ", "th")
+    )
     s = "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
-    return s.replace("ł", "l")
+    return s
 
 
-ALL_CITIES = {_norm_city(k): v for k, v in {**CITY_ZH, **CITY_ZH_EXTRA}.items()}
+ALL_CITIES = {
+    _norm_city(k): v
+    for k, v in {**CITY_ZH, **CITY_ZH_EXTRA, **TOWNS_WEST_ZH, **TOWNS_EAST_ZH}.items()
+}
+
+# 1936 German historical province names overriding modern post-1945 Polish/Russian admin-1 names
+GER_1936_REGION: dict[str, tuple[str, str]] = {
+    "PL-ZP": ("波美拉尼亚", "Pomerania"),
+    "PL-PM": ("东波美拉尼亚", "East Pomerania"),
+    "PL-LB": ("诺伊马克", "Neumark"),
+    "PL-DS": ("下西里西亚", "Lower Silesia"),
+    "PL-OP": ("上西里西亚", "Upper Silesia"),
+    "PL-WN": ("马祖里", "Masuria"),
+    "RU-KGD": ("萨姆兰", "Samland"),
+}
+
+_BAD_ADMIN1_ZH = {"首都", "中央", "中心", "北部", "南部", "东部", "西部", "中部", "大都市"}
+
+_TRAD_TO_SIMP = str.maketrans(
+    "縣區爾萊圖茲達馬亞盧薩維羅蘭納奧內東聖約漢寶華廣門灣島嶺國邊貝諾費傑裏庫別葉凱蘇韋澤烏喬揚萊奧爾薩",
+    "县区尔莱图兹达马亚卢萨维罗兰纳奥内东圣约汉宝华广门湾岛岭国边贝诺费杰里库别叶凯苏韦泽乌乔扬莱奥尔萨",
+)
+
+
+def _clean_admin1_zh(raw: str) -> str:
+    if not raw:
+        return ""
+    s = raw.strip().translate(_TRAD_TO_SIMP)
+    # Remove punctuation variants / parenthetical notes
+    s = re.sub(r"[（(].*?[)）]", "", s).replace("－", "-").replace("—", "-").strip()
+    if not re.search(r"[\u4e00-\u9fff]", s):
+        return ""
+    # Strip trailing administrative suffixes when root has >= 2 chars
+    for suf in ("自治共和国", "自治区", "边疆区", "直辖市", "特别行政区", "行政区", "大区", "省", "州", "县", "郡", "区", "市", "城"):
+        if s.endswith(suf) and len(s) - len(suf) >= 2:
+            s = s[: -len(suf)]
+            break
+    # Keep concise labels (<= 7 chars) so map labels stay legible
+    if len(s) > 7 and "-" in s:
+        s = s.split("-")[0]
+    s = s.strip()
+    return "" if s in _BAD_ADMIN1_ZH else s
 
 DIR_ZH = {
     (0, -1): "北", (1, -1): "东北", (1, 0): "东", (1, 1): "东南",
@@ -87,14 +141,16 @@ def classify_terrain(lon: float, lat: float, gray_val: float, hyp_rgb: tuple[flo
     return "plains"
 
 
-def name_and_enrich_provinces(land_provs: list[dict], places: list[dict]) -> None:
-    """Assign bilingual names, terrain, VP, industry & capital flag to each land province."""
+def name_and_enrich_provinces(land_provs: list[dict], places: list[dict], admin1_units: list[dict] | None = None) -> None:
+    """Assign authentic bilingual names (cities -> NE admin-1 zh -> hidden descriptive fallback)."""
     gray_img = Image.open(RAW_DIR / "GRAY_50M_SR_OB" / "GRAY_50M_SR_OB.tif").convert("L")
     hyp_img = Image.open(RAW_DIR / "HYP_50M_SR" / "HYP_50M_SR.tif").convert("RGB")
     gw, gh = gray_img.size
     hw, hh = hyp_img.size
 
-    # Compute country centroids for clean directional fallback names
+    adm1_list = admin1_units or []
+    adm1_tree = STRtree([u["geom"] for u in adm1_list]) if adm1_list else None
+
     by_owner: dict[str, list[dict]] = {}
     for p in land_provs:
         by_owner.setdefault(p["owner"], []).append(p)
@@ -106,14 +162,14 @@ def name_and_enrich_provinces(land_provs: list[dict], places: list[dict]) -> Non
             sum(pt.y for pt in pts) / len(pts),
         )
 
-    used_names: dict[str, int] = {}
+    used_names: set[str] = set()
+    # Process larger/fixed provinces first so capitals & major cities always claim their primary name
     for p in land_provs:
         geom = p["geom"]
         rp = geom.representative_point()
         p["cx"], p["cy"] = round(rp.x, 1), round(rp.y, 1)
         lon, lat = px_to_lonlat(rp.x, rp.y)
 
-        # Sample raster relief
         gx = int(np.clip((lon + 180.0) / 360.0 * gw, 0, gw - 1))
         gy = int(np.clip((90.0 - lat) / 180.0 * gh, 0, gh - 1))
         gray_val = float(gray_img.getpixel((gx, gy)))
@@ -122,65 +178,118 @@ def name_and_enrich_provinces(land_provs: list[dict], places: list[dict]) -> Non
         hyp_rgb = tuple(float(v) for v in hyp_img.getpixel((hx, hy)))
 
         terrain = p.get("fixed_terrain") or classify_terrain(lon, lat, gray_val, hyp_rgb)
-        # Find top populated place inside this province
-        matched_city = None
-        for c in places:
-            if geom.contains(c["pt"]):
-                matched_city = c
-                break
-
         owner = p["owner"]
         c_zh, c_en = COUNTRY_NAMES_ZH.get(owner, (owner, owner))
+
+        # Collect all NE populated places inside this province (sorted by pop descending)
+        inside_cities = [c for c in places if geom.contains(c["pt"])]
+
+        def lookup_city(c: dict):
+            key = _norm_city(c["name"])
+            if owner == "FRA" and key == "brest":
+                key = "brest-fra"
+            return ALL_CITIES.get(key)
+
+        # Find best overlapping Natural Earth admin-1 regions sorted by intersection area
+        adm1_hits: list[tuple[float, dict]] = []
+        if adm1_tree is not None:
+            for idx in adm1_tree.query(geom):
+                u = adm1_list[idx]
+                if not u["geom"].intersects(geom):
+                    continue
+                ov = u["geom"].intersection(geom).area
+                if ov > geom.area * 0.14:
+                    adm1_hits.append((ov, u))
+            adm1_hits.sort(key=lambda x: x[0], reverse=True)
+
+        hide_label = False
+        nzh, nen, vp, ind, is_cap = "", "", 1, 1, False
 
         if p.get("fixed_name"):
             nzh, nen = p["fixed_name"]
             vp = p.get("fixed_vp", 5)
             ind = p.get("fixed_industry", 4)
             is_cap = bool(p.get("fixed_capital", False))
-            if matched_city and _norm_city(matched_city["name"]) in ALL_CITIES:
+            if inside_cities and lookup_city(inside_cities[0]):
                 p["cityZh"], p["cityEn"] = nzh, nen
-        elif matched_city:
-            key = _norm_city(matched_city["name"])
-            if owner == "FRA" and key == "brest":
-                key = "brest-fra"
-            if key in ALL_CITIES:
-                nzh, nen, is_urb, vp, is_cap = ALL_CITIES[key]
+        elif owner == "DEN" and lon > 14.2 and 54.8 <= lat <= 55.5:
+            nzh, nen, vp, ind, is_cap = "博恩霍尔姆", "Bornholm", 3, 2, False
+        else:
+            # Tier 1: curated 1936 city/town inside province (skip already-used names if possible)
+            chosen_cur = None
+            for c in inside_cities:
+                hit = lookup_city(c)
+                if hit and hit[0] not in used_names:
+                    chosen_cur = (c, hit)
+                    break
+            if chosen_cur is None:
+                for c in inside_cities:
+                    hit = lookup_city(c)
+                    if hit:
+                        chosen_cur = (c, hit)
+                        break
+
+            if chosen_cur is not None:
+                _, (nzh, nen, is_urb, vp, is_cap) = chosen_cur
                 if is_urb:
                     terrain = "urban"
                 ind = max(2, min(12, vp // 2))
                 p["cityZh"], p["cityEn"] = nzh, nen
+                if nzh in used_names:
+                    hide_label = True
             else:
-                # Fallback directional Chinese + real English city name
-                ocx, ocy = owner_center[owner]
-                dx, dy = rp.x - ocx, rp.y - ocy
-                sx = 0 if abs(dx) < 55 else (1 if dx > 0 else -1)
-                sy = 0 if abs(dy) < 55 else (1 if dy > 0 else -1)
-                nzh = f"{c_zh}{DIR_ZH[(sx, sy)]}{TERRAIN_SUFFIX_ZH.get(terrain, '地区')}"
-                nen = matched_city["name"]
-                vp = 3 if matched_city["pop"] > 150000 else 1
-                ind = 3 if matched_city["pop"] > 150000 else 1
-                is_cap = False
-        else:
-            ocx, ocy = owner_center[owner]
-            dx, dy = rp.x - ocx, rp.y - ocy
-            sx = 0 if abs(dx) < 55 else (1 if dx > 0 else -1)
-            sy = 0 if abs(dy) < 55 else (1 if dy > 0 else -1)
-            nzh = f"{c_zh}{DIR_ZH[(sx, sy)]}{TERRAIN_SUFFIX_ZH.get(terrain, '地区')}"
-            nen = f"{DIR_EN[(sx, sy)]} {c_en}"
-            vp, ind, is_cap = 1, 1, False
+                # Tier 2: authentic Natural Earth admin-1 Chinese name (with 1936 GER historical override)
+                chosen_adm = None
+                for _, u in adm1_hits:
+                    if owner == "GER" and u["iso"] in GER_1936_REGION:
+                        cand_zh, cand_en = GER_1936_REGION[u["iso"]]
+                    elif owner == "GER" and u["adm0"] in ("POL", "RUS"):
+                        continue
+                    else:
+                        cand_zh = _clean_admin1_zh(u["name_zh"])
+                        cand_en = u["name"]
+                    if cand_zh and cand_zh not in used_names:
+                        chosen_adm = (cand_zh, cand_en)
+                        break
 
-        # Ensure unique Chinese province name
-        cnt = used_names.get(nzh, 0) + 1
-        used_names[nzh] = cnt
-        if cnt > 1:
-            nzh = f"{nzh}·{['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'][min(cnt - 2, 9)]}"
+                if chosen_adm is not None:
+                    nzh, nen = chosen_adm
+                    top_pop = inside_cities[0]["pop"] if inside_cities else 0
+                    vp = 4 if top_pop > 120000 else 2
+                    ind = 3 if top_pop > 120000 else 2
+                else:
+                    # Tier 3: descriptive fallback for info card ONLY — hidden from map labels!
+                    hide_label = True
+                    ocx, ocy = owner_center[owner]
+                    dx, dy = rp.x - ocx, rp.y - ocy
+                    sx = 0 if abs(dx) < 55 else (1 if dx > 0 else -1)
+                    sy = 0 if abs(dy) < 55 else (1 if dy > 0 else -1)
+                    if adm1_hits:
+                        u0 = adm1_hits[0][1]
+                        if owner == "GER" and u0["iso"] in GER_1936_REGION:
+                            root_zh, root_en = GER_1936_REGION[u0["iso"]]
+                        else:
+                            root_zh = _clean_admin1_zh(u0["name_zh"]) or c_zh
+                            root_en = u0["name"] or c_en
+                        d_zh = DIR_ZH[(sx, sy)]
+                        nzh = f"{d_zh}{root_zh}" if d_zh != "中" else f"{root_zh}腹地"
+                        nen = inside_cities[0]["name"] if inside_cities else f"{DIR_EN[(sx, sy)]} {root_en}"
+                    else:
+                        nzh = f"{c_zh}{DIR_ZH[(sx, sy)]}{TERRAIN_SUFFIX_ZH.get(terrain, '地区')}"
+                        nen = inside_cities[0]["name"] if inside_cities else f"{DIR_EN[(sx, sy)]} {c_en}"
+                    top_pop = inside_cities[0]["pop"] if inside_cities else 0
+                    vp = 3 if top_pop > 120000 else 1
+                    ind = 2 if top_pop > 120000 else 1
 
+        used_names.add(nzh)
         p["nameZh"] = nzh
         p["nameEn"] = nen
         p["terrain"] = terrain
         p["vp"] = vp
         p["industry"] = ind
         p["isCapital"] = is_cap
+        if hide_label:
+            p["hideMapLabel"] = True
 
 
 def build_rivers_and_graticule() -> tuple[list[dict], list[dict]]:

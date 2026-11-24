@@ -132,11 +132,167 @@ describe('Europe 1936 Map Topology & Data Integrity', () => {
       ['Northern Ireland (Belfast)', -5.93, 54.60, 'GBR'],
       ['Iceland (Reykjavík)', -21.94, 64.15, 'ISL'],
       ['European Turkey (Edirne)', 26.56, 41.68, 'TUR'],
+      ['Subcarpathian Ruthenia (Uzhhorod)', 22.30, 48.62, 'CZE'],
+      ['South Tyrol (Bolzano)', 11.35, 46.50, 'ITA'],
+      ['Italian Istria (Pula)', 13.85, 44.87, 'ITA'],
+      ['Romanian Southern Dobruja (Dobrich)', 27.83, 43.57, 'ROM'],
     ];
 
     for (const [label, lon, lat, expectedOwner] of historicalChecks) {
       const got = ownerAt(lon, lat);
       expect(got.owner, `${label} at (${lon},${lat}) mapped to ${got.nameZh} (${got.owner})`).toBe(expectedOwner);
     }
+  });
+
+  it('prevents national-border or coastline seams inside any single country', () => {
+    const topo = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'topology.topo.json'), 'utf8')) as {
+      transform?: { scale: [number, number]; translate: [number, number] };
+      arcs: number[][][];
+      objects: {
+        provinces: {
+          geometries: Array<{
+            type: string;
+            properties: { id: number };
+            arcs: number[][] | number[][][];
+          }>;
+        };
+      };
+    };
+    const sx = topo.transform?.scale[0] ?? 1;
+    const sy = topo.transform?.scale[1] ?? 1;
+    const tx = topo.transform?.translate[0] ?? 0;
+    const ty = topo.transform?.translate[1] ?? 0;
+
+    const decoded = topo.arcs.map((arc) => {
+      let x = 0;
+      let y = 0;
+      return arc.map((pt) => {
+        x += pt[0] ?? 0;
+        y += pt[1] ?? 0;
+        return [x * sx + tx, y * sy + ty] as [number, number];
+      });
+    });
+
+    const arcMeta = decoded.map((pts) => ({
+      pts,
+      owners: new Set<string>(),
+      pids: new Set<number>(),
+      hasLand: false,
+      hasSea: false,
+    }));
+
+    const visitRings = (rings: number[][], pid: number, owner: string, isSea: boolean) => {
+      for (const ring of rings) {
+        for (const r of ring) {
+          const idx = r < 0 ? ~r : r;
+          const a = arcMeta[idx];
+          if (!a) continue;
+          a.pids.add(pid);
+          a.owners.add(owner);
+          if (isSea) a.hasSea = true;
+          else a.hasLand = true;
+        }
+      }
+    };
+
+    for (const g of topo.objects.provinces.geometries) {
+      const pid = g.properties.id;
+      const p = provById.get(pid);
+      if (!p) continue;
+      if (g.type === 'Polygon') visitRings(g.arcs as number[][], pid, p.owner, p.isSea);
+      else if (g.type === 'MultiPolygon') {
+        for (const poly of g.arcs as number[][][]) visitRings(poly, pid, p.owner, p.isSea);
+      }
+    }
+
+    const ownerAtPx = (wx: number, wy: number): string | null => {
+      const x = Math.round(wx);
+      const y = Math.round(wy);
+      if (x < 0 || x >= png.width || y < 0 || y >= png.height) return null;
+      const off = (y * png.width + x) * 4;
+      const id = (png.data[off] ?? 0) | ((png.data[off + 1] ?? 0) << 8);
+      return provById.get(id)?.owner ?? null;
+    };
+
+    const falseSeams: string[] = [];
+    const straightEastPrussia: string[] = [];
+
+    for (let i = 0; i < arcMeta.length; i++) {
+      const a = arcMeta[i]!;
+      if (a.pts.length < 2) continue;
+      let totalLen = 0;
+      for (let k = 0; k < a.pts.length - 1; k++) {
+        totalLen += Math.hypot(a.pts[k + 1]![0] - a.pts[k]![0], a.pts[k + 1]![1] - a.pts[k]![1]);
+      }
+
+      // Check East Prussia interior for any straight post-1945 Kaliningrad-Poland seam
+      if (a.hasLand && !a.hasSea && a.owners.size === 1 && a.owners.has('GER') && totalLen > 50) {
+        const p0 = a.pts[0]!;
+        const p1 = a.pts[a.pts.length - 1]!;
+        const mx = (p0[0] + p1[0]) * 0.5;
+        const my = (p0[1] + p1[1]) * 0.5;
+        const chord = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+        if (mx > 1990 && mx < 2170 && my > 1270 && my < 1430 && chord / totalLen > 0.992) {
+          straightEastPrussia.push(`arc#${i} len=${totalLen.toFixed(1)} ratio=${(chord / totalLen).toFixed(4)}`);
+        }
+      }
+
+      // Any arc rendered as international border must NOT have the same land country on both sides;
+      // any coastline arc (>35px) must actually border sea pixels within a small neighborhood (no inland seam).
+      const isIntl = a.hasLand && !a.hasSea && a.owners.size > 1;
+      const isCoast = a.hasLand && a.hasSea;
+      if (!isIntl && !isCoast) continue;
+      if (totalLen < (isCoast ? 8 : 14)) continue;
+
+      let sameLandBothSides = 0;
+      let sawSeaNear = false;
+      let checkedSamples = 0;
+      for (const frac of [0.25, 0.5, 0.75]) {
+        const idx = Math.min(a.pts.length - 2, Math.max(0, Math.floor((a.pts.length - 1) * frac)));
+        const p0 = a.pts[idx]!;
+        const p1 = a.pts[idx + 1]!;
+        const dx = p1[0] - p0[0];
+        const dy = p1[1] - p0[1];
+        const seg = Math.hypot(dx, dy);
+        if (seg < 0.05) continue;
+        const nx = -dy / seg;
+        const ny = dx / seg;
+        const mx = (p0[0] + p1[0]) * 0.5;
+        const my = (p0[1] + p1[1]) * 0.5;
+        const dist = isCoast ? 1.5 : 2.5;
+        const left = ownerAtPx(mx + nx * dist, my + ny * dist);
+        const right = ownerAtPx(mx - nx * dist, my - ny * dist);
+        if (isCoast) {
+          for (let oy = -3; oy <= 3 && !sawSeaNear; oy++) {
+            for (let ox = -3; ox <= 3; ox++) {
+              if (ownerAtPx(mx + ox, my + oy) === 'SEA') {
+                sawSeaNear = true;
+                break;
+              }
+            }
+          }
+        }
+        if (left && right) {
+          checkedSamples++;
+          if (left === right && left !== 'SEA') sameLandBothSides++;
+        }
+      }
+      if (isIntl && checkedSamples >= 2 && sameLandBothSides === checkedSamples) {
+        falseSeams.push(`intl arc#${i} owners=[${[...a.owners].join(',')}] len=${totalLen.toFixed(1)}`);
+      }
+      if (isCoast && !sawSeaNear && checkedSamples >= 2 && sameLandBothSides === checkedSamples) {
+        falseSeams.push(`coast arc#${i} owners=[${[...a.owners].join(',')}] len=${totalLen.toFixed(1)}`);
+      }
+    }
+
+    expect(straightEastPrussia, `Straight seam in East Prussia: ${straightEastPrussia.join('; ')}`).toEqual([]);
+    expect(falseSeams, `False internal national/coast seams: ${falseSeams.join('; ')}`).toEqual([]);
+  });
+
+  it('avoids generic directional placeholders on visible map labels', () => {
+    const visibleLabels = meta.provinces.filter((p) => !p.isSea && !p.hideMapLabel);
+    const badSuffix = visibleLabels.filter((p) => /[·](甲|乙|丙|丁|戊|己|庚|辛|壬|癸)$/.test(p.nameZh));
+    expect(badSuffix.map((p) => p.nameZh)).toEqual([]);
+    expect(visibleLabels.length).toBeGreaterThanOrEqual(Math.floor(meta.landCount * 0.75));
   });
 });

@@ -84,10 +84,12 @@ export class BorderMeshBuilder {
   private readonly riverMinorG = new Graphics();
   private readonly coastG = new Graphics();
   private readonly intlBorderG = new Graphics();
+  private readonly hoverBorderG = new Graphics();
   private readonly selectGlowG = new Graphics();
 
   private readonly decodedArcs: DecodedArc[] = [];
   private readonly provById = new Map<number, ProvinceRecord>();
+  private currentSelectedProvId: number | null = null;
 
   constructor(
     meta: EuropeMapMeta,
@@ -106,6 +108,7 @@ export class BorderMeshBuilder {
       this.provBorderG,
       this.coastG,
       this.intlBorderG,
+      this.hoverBorderG,
       this.selectGlowG,
     );
 
@@ -168,7 +171,7 @@ export class BorderMeshBuilder {
     for (const a of arcs) {
       if (a.points.length < 2) continue;
       const isUnshared = a.provIds.size === 1;
-      const isSuspectCoast = a.hasLand && a.hasSea && a.points.length <= 4;
+      const isSuspectCoast = a.hasLand && a.hasSea && a.points.length <= 24;
       if (!isUnshared && !isSuspectCoast) continue;
 
       const midIdx = Math.floor((a.points.length - 1) * 0.5);
@@ -249,27 +252,50 @@ export class BorderMeshBuilder {
     this.intlBorderG.stroke({ width: 1.95, color: 0x1e1a17, alpha: 0.96, join: 'round', cap: 'round' });
   }
 
-  /** Draw crisp vermilion outer border halo around selected country + inner highlight on selected province. */
+  /** Draw vermilion outer glow on selected province + understated thin frontier line on its country. */
   setSelection(selectedOwner: string | null, selectedProvId: number | null): void {
+    this.currentSelectedProvId = selectedProvId;
     this.selectGlowG.clear();
     if (!selectedOwner && !selectedProvId) return;
 
+    // 1. Subtle thin hairline on the owning country's outer border (excluding selected province's own arcs)
     if (selectedOwner && selectedOwner !== 'SEA') {
       const frontierArcs = this.decodedArcs.filter(
-        (arc) => arc.owners.has(selectedOwner) && (arc.hasSea || arc.owners.size > 1),
+        (arc) =>
+          arc.owners.has(selectedOwner) &&
+          (arc.hasSea || arc.owners.size > 1) &&
+          (selectedProvId === null || !arc.provIds.has(selectedProvId)),
       );
-      for (const arc of frontierArcs) drawPolyline(this.selectGlowG, arc.points);
-      this.selectGlowG.stroke({ width: 4.8, color: 0xb83a2d, alpha: 0.34, join: 'round', cap: 'round' });
-      for (const arc of frontierArcs) drawPolyline(this.selectGlowG, arc.points);
-      this.selectGlowG.stroke({ width: 1.75, color: 0xd94b38, alpha: 0.96, join: 'round', cap: 'round' });
+      if (frontierArcs.length > 0) {
+        for (const arc of frontierArcs) drawPolyline(this.selectGlowG, arc.points);
+        this.selectGlowG.stroke({ width: 1.05, color: 0xb83a2d, alpha: 0.34, join: 'round', cap: 'round' });
+      }
     }
 
+    // 2. Primary vermilion outer glow strictly around the SELECTED PROVINCE
     if (selectedProvId !== null) {
-      for (const arc of this.decodedArcs) {
-        if (arc.provIds.has(selectedProvId)) drawPolyline(this.selectGlowG, arc.points);
+      const provArcs = this.decodedArcs.filter((arc) => arc.provIds.has(selectedProvId));
+      if (provArcs.length > 0) {
+        for (const arc of provArcs) drawPolyline(this.selectGlowG, arc.points);
+        this.selectGlowG.stroke({ width: 5.0, color: 0xb83a2d, alpha: 0.36, join: 'round', cap: 'round' });
+        for (const arc of provArcs) drawPolyline(this.selectGlowG, arc.points);
+        this.selectGlowG.stroke({ width: 1.9, color: 0xd94b38, alpha: 0.96, join: 'round', cap: 'round' });
+        for (const arc of provArcs) drawPolyline(this.selectGlowG, arc.points);
+        this.selectGlowG.stroke({ width: 0.65, color: 0xf4cfa8, alpha: 0.45, join: 'round', cap: 'round' });
       }
-      this.selectGlowG.stroke({ width: 1.35, color: 0xf4efe6, alpha: 0.9, join: 'round', cap: 'round' });
     }
+  }
+
+  /** Draw refined antique-gold / ink hairline around the hovered province (when not already selected). */
+  setHover(hoveredProvId: number | null): void {
+    this.hoverBorderG.clear();
+    if (hoveredProvId === null || hoveredProvId === this.currentSelectedProvId) return;
+    const provArcs = this.decodedArcs.filter((arc) => arc.provIds.has(hoveredProvId));
+    if (provArcs.length === 0) return;
+    for (const arc of provArcs) drawPolyline(this.hoverBorderG, arc.points);
+    this.hoverBorderG.stroke({ width: 2.2, color: 0x221c16, alpha: 0.34, join: 'round', cap: 'round' });
+    for (const arc of provArcs) drawPolyline(this.hoverBorderG, arc.points);
+    this.hoverBorderG.stroke({ width: 1.15, color: 0xd9b86c, alpha: 0.92, join: 'round', cap: 'round' });
   }
 
   updateLod(zoom: number): void {

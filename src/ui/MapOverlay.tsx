@@ -21,6 +21,13 @@ const MODES: Array<{ id: MapMode; label: string; key: string }> = [
   { id: 'industry', label: '工业资源', key: 'R' },
 ];
 
+const DIPLO_FACTION_LEGEND = [
+  { label: '同盟国', color: '#4B7098' },
+  { label: '轴心国', color: '#9C4842' },
+  { label: '共产国际', color: '#963E3A' },
+  { label: '中立国', color: '#A8A091' },
+];
+
 const LEGENDS: Partial<Record<MapMode, Array<{ label: string; color: string }>>> = {
   terrain: [
     { label: '平原', color: '#E5DEC9' },
@@ -28,7 +35,7 @@ const LEGENDS: Partial<Record<MapMode, Array<{ label: string; color: string }>>>
     { label: '丘陵', color: '#B59E7A' },
     { label: '高山', color: '#6E5A4B' },
     { label: '沼泽', color: '#6B7D78' },
-    { label: '都市', color: '#C29A86' },
+    { label: '都市', color: '#CCB298' },
     { label: '荒漠', color: '#D8C394' },
   ],
   diplomacy: [
@@ -114,16 +121,21 @@ export function MapOverlay({ actions }: Props) {
         </button>
       </header>
 
-      {LEGENDS[mode] && (
-        <aside class="mode-legend" aria-label="图例">
-          {LEGENDS[mode]!.map((item) => (
-            <span class="legend-item" key={item.label}>
-              <span class="terrain-dot" style={`background:${item.color}`} />
-              {item.label}
-            </span>
-          ))}
-        </aside>
-      )}
+      {(() => {
+        const legendItems =
+          mode === 'diplomacy' && (!selected || selected.isSea) ? DIPLO_FACTION_LEGEND : LEGENDS[mode];
+        if (!legendItems) return null;
+        return (
+          <aside class="mode-legend" aria-label="图例">
+            {legendItems.map((item) => (
+              <span class="legend-item" key={item.label}>
+                <span class="terrain-dot" style={`background:${item.color}`} />
+                {item.label}
+              </span>
+            ))}
+          </aside>
+        );
+      })()}
 
       {err && (
         <div

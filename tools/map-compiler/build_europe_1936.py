@@ -24,11 +24,11 @@ def main() -> None:
 
     print("[2/5] Subdividing countries into provinces & sea zones...")
     places = load_populated_places()
-    land_provs, sea_provs, _ = subdivide_all(countries, fixed_defs, places)
+    land_provs, sea_provs, admin1_units = subdivide_all(countries, fixed_defs, places)
     print(f"      {len(land_provs)} land + {len(sea_provs)} sea")
 
     print("[3/5] Classifying terrain, naming provinces & extracting rivers...")
-    name_and_enrich_provinces(land_provs, places)
+    name_and_enrich_provinces(land_provs, places, admin1_units)
     rivers, graticule = build_rivers_and_graticule()
     print(f"      {len(rivers)} river segments, {len(graticule)} graticule curves")
 

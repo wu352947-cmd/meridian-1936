@@ -7,11 +7,20 @@ import shapefile
 from scipy.spatial import Voronoi
 from shapely.geometry import Point, Polygon, MultiPolygon, box, shape
 from shapely.ops import unary_union
+from shapely.strtree import STRtree
 from shapely.validation import make_valid
 
 from config_1936 import RAW_DIR, WIDTH, HEIGHT, TARGET_PROVINCES, lonlat_to_px
 from names_zh import CITY_ZH
 from names_zh_east import CITY_ZH_EXTRA, SEA_SEEDS
+from organic_borders import (
+    NO_CUT_ISOS,
+    agglomerative_merge,
+    jitter_shared_edges,
+    load_admin1_units,
+    load_split_rivers,
+    try_river_split,
+)
 
 ALL_CITIES = {**CITY_ZH, **CITY_ZH_EXTRA}
 
@@ -113,12 +122,129 @@ def _sample_seeds_in_geom(geom, n: int, city_pts: list[tuple[float, float]], rng
     return seeds
 
 
+def _allocate_counts(polys: list, total_k: int) -> list[int]:
+    if not polys:
+        return []
+    total_area = sum(p.area for p in polys) or 1.0
+    alloc = [max(1, round(total_k * p.area / total_area)) for p in polys]
+    while sum(alloc) > total_k and max(alloc) > 1:
+        idx = alloc.index(max(alloc))
+        alloc[idx] -= 1
+    while sum(alloc) < total_k:
+        idx = max(range(len(polys)), key=lambda i: polys[i].area / alloc[i])
+        alloc[idx] += 1
+    return alloc
+
+
+def _extract_admin1_partition(part, admin1_units: list[dict], adm1_tree: STRtree) -> list:
+    """Clip Natural Earth admin-1 units into a clean, gap-free partition of `part`."""
+    cand_idxs = adm1_tree.query(part)
+    no_cut_geoms = []
+    raw_pieces = []
+    for idx in cand_idxs:
+        u = admin1_units[idx]
+        if not u["geom"].intersects(part):
+            continue
+        inter = _clean(u["geom"].intersection(part))
+        if inter.is_empty or inter.area < 25.0:
+            continue
+        if u["iso"] in NO_CUT_ISOS:
+            no_cut_geoms.append(inter)
+        else:
+            raw_pieces.append(inter)
+
+    if no_cut_geoms:
+        merged_ep = _clean(unary_union(no_cut_geoms).buffer(0.6, join_style=2).buffer(-0.6, join_style=2).intersection(part))
+        if not merged_ep.is_empty and merged_ep.area >= 25.0:
+            raw_pieces.append(merged_ep)
+
+    if len(raw_pieces) <= 1:
+        return [part]
+
+    # Resolve overlaps deterministically and attach any tiny uncovered slivers to nearest piece
+    raw_pieces.sort(key=lambda g: g.area, reverse=True)
+    claimed = Polygon()
+    clean_pieces = []
+    for g in raw_pieces:
+        d = _clean(g.difference(claimed))
+        if not d.is_empty and d.area >= 35.0:
+            clean_pieces.append(d)
+            claimed = _clean(unary_union([claimed, d]))
+
+    if not clean_pieces:
+        return [part]
+
+    # Absorb tiny city-state enclaves (e.g. Berlin/Vienna/Prague city-only < 580 px²) into surrounding piece
+    # so capitals form balanced clickable provinces via city-seeded subdivision
+    big = [p for p in clean_pieces if p.area >= 580.0]
+    tiny = [p for p in clean_pieces if p.area < 580.0]
+    if big and tiny:
+        for tp in tiny:
+            ni = max(range(len(big)), key=lambda i: getattr(big[i].boundary.intersection(tp.boundary), "length", 0.0) - big[i].distance(tp) * 0.1)
+            big[ni] = _clean(unary_union([big[ni], tp]))
+        clean_pieces = big
+
+    leftover = _clean(part.difference(unary_union(clean_pieces)))
+    if not leftover.is_empty and leftover.area >= 5.0:
+        lparts = [leftover] if leftover.geom_type == "Polygon" else list(leftover.geoms)
+        for lp in lparts:
+            if lp.area < 2.0:
+                continue
+            ni = min(range(len(clean_pieces)), key=lambda i: clean_pieces[i].distance(lp))
+            clean_pieces[ni] = _clean(unary_union([clean_pieces[ni], lp]))
+
+    return clean_pieces
+
+
+def _subdivide_part_organically(
+    part,
+    k: int,
+    part_places: list[dict],
+    admin1_units: list[dict],
+    adm1_tree: STRtree,
+    rivers: list,
+    rng: np.random.Generator,
+) -> list:
+    if k <= 1:
+        return [part]
+    major_pts = [p["pt"] for p in part_places if p["pop"] >= 200000][:k * 2]
+    pieces = _extract_admin1_partition(part, admin1_units, adm1_tree)
+
+    if len(pieces) > k:
+        merged = agglomerative_merge(pieces, k, major_pts)
+        # If disconnected components prevented reaching k, allow minor Voronoi only if still way off
+        return jitter_shared_edges(merged, part)
+
+    # Fewer admin-1 units than k: allocate k across admin-1 units, split along rivers then jittered Voronoi
+    alloc = _allocate_counts(pieces, k)
+    out_cells: list = []
+    for piece, kp in zip(pieces, alloc):
+        if kp <= 1:
+            out_cells.append(piece)
+            continue
+        river_parts = try_river_split(piece, rivers, kp)
+        r_alloc = _allocate_counts(river_parts, kp)
+        for rp_geom, kr in zip(river_parts, r_alloc):
+            if kr <= 1:
+                out_cells.append(rp_geom)
+                continue
+            c_pts = [(p["px"], p["py"]) for p in part_places if rp_geom.contains(p["pt"])]
+            seeds = _sample_seeds_in_geom(rp_geom, kr, c_pts, rng)
+            sub_cells = [c for c in _voronoi_cells(seeds, rp_geom) if not c.is_empty and c.area >= 15.0]
+            sub_cells = jitter_shared_edges(sub_cells, rp_geom)
+            out_cells.extend(sub_cells)
+
+    return jitter_shared_edges(out_cells, part)
+
+
 def subdivide_all(countries: dict[str, object], fixed_defs: list, places: list[dict]):
-    """Produce land province dicts + sea zone dicts covering 100% of the canvas."""
+    """Produce organic land province dicts + sea zone dicts covering 100% of the canvas."""
     rng = np.random.default_rng(19360101)
+    admin1_units = load_admin1_units()
+    adm1_tree = STRtree([u["geom"] for u in admin1_units])
+    rivers = load_split_rivers()
     land_provs: list[dict] = []
 
-    # Group fixed provinces by tag
     fixed_by_tag: dict[str, list] = {}
     for item in fixed_defs:
         fixed_by_tag.setdefault(item[0], []).append(item)
@@ -145,39 +271,19 @@ def subdivide_all(countries: dict[str, object], fixed_defs: list, places: list[d
             land_provs.append({"owner": tag, "core": tag, "geom": rem_geom})
             continue
 
-        # Split disconnected landmasses proportional to area (preserving significant islands)
         parts = [rem_geom] if rem_geom.geom_type == "Polygon" else list(rem_geom.geoms)
         parts = [p for p in parts if p.area >= 12.0]
         parts.sort(key=lambda p: p.area, reverse=True)
-        # Keep tiny islands attached to the nearest major part unless large enough to be own province
-        big_parts = [p for p in parts if p.area >= 260.0]
-        if not big_parts:
-            big_parts = [parts[0]]
+        big_parts = [p for p in parts if p.area >= 260.0] or [parts[0]]
         tiny_parts = [p for p in parts if p not in big_parts]
-
-        # Allocate target_rem across big_parts
-        total_area = sum(p.area for p in big_parts)
-        alloc = [max(1, round(target_rem * p.area / total_area)) for p in big_parts]
-        while sum(alloc) > target_rem and max(alloc) > 1:
-            idx = alloc.index(max(alloc))
-            alloc[idx] -= 1
-        while sum(alloc) < target_rem:
-            idx = max(range(len(big_parts)), key=lambda i: big_parts[i].area / alloc[i])
-            alloc[idx] += 1
+        alloc = _allocate_counts(big_parts, target_rem)
 
         country_cells: list = []
         for part, k in zip(big_parts, alloc):
-            if k <= 1:
-                country_cells.append(part)
-                continue
-            part_cities = [(p["px"], p["py"]) for p in places if part.contains(p["pt"])]
-            seeds = _sample_seeds_in_geom(part, k, part_cities, rng)
-            cells = _voronoi_cells(seeds, part)
-            for cell in cells:
-                if not cell.is_empty and cell.area >= 15.0:
-                    country_cells.append(cell)
+            part_places = [p for p in places if part.contains(p["pt"])]
+            cells = _subdivide_part_organically(part, k, part_places, admin1_units, adm1_tree, rivers, rng)
+            country_cells.extend(cells)
 
-        # Attach tiny islands to their nearest cell in same country
         for tp in tiny_parts:
             if not country_cells:
                 country_cells.append(tp)
@@ -188,10 +294,28 @@ def subdivide_all(countries: dict[str, object], fixed_defs: list, places: list[d
         for cell in country_cells:
             land_provs.append({"owner": tag, "core": tag, "geom": cell})
 
-    # Build sea zones covering exact complement of all land in canvas
     frame = box(0, 0, WIDTH, HEIGHT)
     all_land = _clean(unary_union([p["geom"] for p in land_provs]))
-    ocean = _clean(frame.difference(all_land))
+    ocean_raw = _clean(frame.difference(all_land))
+
+    # Eliminate any tiny disconnected inland sliver polygons (< 180 px²) from ocean by absorbing into adjacent land province
+    ocean_parts = [ocean_raw] if ocean_raw.geom_type == "Polygon" else list(ocean_raw.geoms)
+    real_ocean = []
+    slivers = []
+    for op in ocean_parts:
+        if op.area >= 180.0:
+            real_ocean.append(op)
+        elif op.area >= 0.05:
+            slivers.append(op)
+    if slivers:
+        land_tree = STRtree([p["geom"] for p in land_provs])
+        for sl in slivers:
+            cands = list(land_tree.query(sl.buffer(2.0)))
+            if cands:
+                ni = min(cands, key=lambda i: land_provs[i]["geom"].distance(sl))
+                land_provs[ni]["geom"] = _clean(unary_union([land_provs[ni]["geom"], sl]))
+        all_land = _clean(unary_union([p["geom"] for p in land_provs]))
+    ocean = _clean(unary_union(real_ocean)) if real_ocean else _clean(frame.difference(all_land))
 
     sea_pts = [lonlat_to_px(lon, lat) for (lon, lat, _, _) in SEA_SEEDS]
     sea_cells = _voronoi_cells(sea_pts, ocean)
@@ -203,4 +327,4 @@ def subdivide_all(countries: dict[str, object], fixed_defs: list, places: list[d
             "owner": "SEA", "core": "SEA", "geom": cell, "is_sea": True,
             "fixed_name": (nzh, nen),
         })
-    return land_provs, sea_provs, all_land
+    return land_provs, sea_provs, admin1_units
