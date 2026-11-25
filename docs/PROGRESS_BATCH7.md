@@ -25,6 +25,11 @@
   - `tools/build_fonts.py` 重建 1,497 字形 WOFF2 子集；`src/assets/icons/logisticsIcons.ts` 与程序纹饰登记至 `public/assets/ASSET_LICENSES.json` 与 `CREDITS.md`。
   - 新增 7 张 SwiftShader 1440×900 截图（未覆盖任何既有截图）并逐张目视复查确认过渡平滑、零重叠、零控制台报错：`shots/b7_supply_lens_ger.png`、`shots/b7_supply_lens_sov_winter.png`、`shots/b7_supply_lens_colorblind.png`、`shots/b7_mud_season.png`、`shots/b7_out_of_supply_front.png`、`shots/b7_battle_report_supply.png`、`shots/b7_logistics_drawer.png`。
 
+## 审阅返工（r2）
+- 季节叠层加强：严冬四角冰霜晕与受影响气候带冷蓝灰调、泥泞季四角泥渍与东欧泥褐调，现可一眼识别，且不降低国名/军牌/HUD 可读性。
+- M3 补给透镜：色带内部连续明暗渐变，S=80 / S=40 处加铅笔等值线；色盲色表同步。
+- 重拍 `b7_supply_lens_ger.png`、`b7_supply_lens_sov_winter.png`、`b7_supply_lens_colorblind.png`、`b7_mud_season.png`。
+
 ## 已知不足（留待后续批次补全）
 - 海区护航效率对港口补给的动态折减与空军夜间出动率（`×0.50`）已预留数据接口，留待海空军批次（Batch 10）接入。
 - 占领区抵抗度、顺从度与宪兵镇压留待后续批次实装（当前 F5 仅保留「占领管理（后续开放）」占位）。
