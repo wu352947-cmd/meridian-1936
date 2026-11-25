@@ -2,7 +2,7 @@ import { Container, Graphics } from 'pixi.js';
 import type { Topology, GeometryCollection, Polygon as TopoPoly, MultiPolygon as TopoMulti } from 'topojson-specification';
 import type { EuropeMapMeta, ProvinceRecord } from '../types/map';
 
-interface DecodedArc {
+export interface DecodedArc {
   points: [number, number][];
   owners: Set<string>;
   provIds: Set<number>;
@@ -311,6 +311,10 @@ export class BorderMeshBuilder {
     this.hoverBorderG.stroke({ width: 2.2, color: 0x221c16, alpha: 0.34, join: 'round', cap: 'round' });
     for (const arc of provArcs) drawPolyline(this.hoverBorderG, arc.points);
     this.hoverBorderG.stroke({ width: 1.15, color: 0xd9b86c, alpha: 0.92, join: 'round', cap: 'round' });
+  }
+
+  getDecodedArcs(): readonly DecodedArc[] {
+    return this.decodedArcs;
   }
 
   updateLod(zoom: number): void {

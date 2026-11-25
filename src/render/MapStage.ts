@@ -2,6 +2,7 @@ import {
   Application,
   BufferImageSource,
   Container,
+  Graphics,
   ImageSource,
   Mesh,
   MeshGeometry,
@@ -11,16 +12,25 @@ import type { EuropeMapMeta, MapMode, ProvinceRecord } from '../types/map';
 import type { LoadedMapBundle } from './loadMapData';
 import { BorderMeshBuilder } from './BorderMeshBuilder';
 import { CurvedLabelLayer } from './CurvedLabelLayer';
+import { FrontlineArrowLayer } from './FrontlineArrowLayer';
 import { IndustryOverlayLayer } from './IndustryOverlayLayer';
 import { TerrainDetailLayer } from './TerrainDetailLayer';
+import { UnitCounterLayer, type CounterHitItem } from './UnitCounterLayer';
 import { buildOwnerIndexMap, fillProvinceLuts } from './lutPalette';
 import { createProvinceLutShader } from './shaders/provinceLut';
+import type { ArmySnap, BrigadeSnap } from '../sim/systems/armyTypes';
 import type { RegionDynamicSnap } from '../sim/systems/industryTypes';
+import type { OrderToolMode } from '../ui/store/simStore';
 
 export interface MapStageCallbacks {
   onHoverProvince: (prov: ProvinceRecord | null) => void;
   onSelectProvince: (prov: ProvinceRecord | null) => void;
   onCameraChange: (cam: { x: number; y: number; zoom: number }) => void;
+  onClickCounter?: (hit: CounterHitItem) => void;
+  onMarqueeSelect?: (brigadeIds: number[]) => void;
+  onRightClickProvince?: (prov: ProvinceRecord) => void;
+  onOrderClickProvince?: (prov: ProvinceRecord) => void;
+  onArrowDragComplete?: (startProv: ProvinceRecord, endProv: ProvinceRecord) => void;
 }
 
 const MODE_NUM: Record<MapMode, number> = {
@@ -49,11 +59,17 @@ export class MapStage {
   private readonly lutShader: Shader;
   private readonly terrainDetails: TerrainDetailLayer;
   private readonly borders: BorderMeshBuilder;
+  private readonly frontlines: FrontlineArrowLayer;
   private readonly labels: CurvedLabelLayer;
   private readonly industryOverlay: IndustryOverlayLayer;
+  private readonly counters: UnitCounterLayer;
+  private readonly marqueeG = new Graphics();
   private readonly cbs: MapStageCallbacks;
 
   private mapMode: MapMode = 'political';
+  private orderToolMode: OrderToolMode = 'select';
+  private playerTag = 'GER';
+  private autotest = false;
   private selectedProvId: number | null = null;
   private selectedOwner: string | null = null;
   private hoveredProvId: number | null = null;
@@ -66,9 +82,13 @@ export class MapStage {
   private readonly minZoom = 0.38;
   private readonly maxZoom = 5.5;
 
-  // Drag state
+  // Drag / marquee / arrow draw state
   private dragging = false;
   private dragMoved = false;
+  private marqueeActive = false;
+  private marqueeStartX = 0;
+  private marqueeStartY = 0;
+  private arrowStartProvId: number | null = null;
   private lastPtrX = 0;
   private lastPtrY = 0;
 
@@ -143,11 +163,30 @@ export class MapStage {
     const mapMesh = new Mesh({ geometry, shader: this.lutShader });
     this.terrainDetails = new TerrainDetailLayer(this.meta, this.pickGrid, this.pickW, this.pickH);
     this.borders = new BorderMeshBuilder(this.meta, bundle.topology, this.pickGrid, this.pickW, this.pickH);
+    this.frontlines = new FrontlineArrowLayer(
+      this.meta,
+      this.borders.getDecodedArcs(),
+      this.pickGrid,
+      this.pickW,
+      this.pickH,
+    );
     this.labels = new CurvedLabelLayer(this.meta);
     this.industryOverlay = new IndustryOverlayLayer();
+    this.counters = new UnitCounterLayer(this.meta);
 
-    this.world.addChild(mapMesh, this.terrainDetails.root, this.borders.root, this.labels.root, this.industryOverlay.root);
-    this.app.stage.addChild(this.world);
+    this.world.addChild(
+      mapMesh,
+      this.terrainDetails.root,
+      this.borders.root,
+      this.frontlines.root,
+      this.labels.root,
+      this.industryOverlay.root,
+    );
+    this.app.stage.addChild(this.world, this.counters.root, this.marqueeG);
+
+    this.app.ticker.add((t) => {
+      if (!this.autotest) this.frontlines.advanceFlow(t.deltaMS / 1000);
+    });
 
     this.refreshLuts();
     this.fitOverviewCamera();
@@ -201,6 +240,7 @@ export class MapStage {
     this.lutShader.resources.mapUniforms.uniforms.uZoom = this.zoom;
     this.terrainDetails.updateLod(this.zoom);
     this.borders.updateLod(this.zoom);
+    this.frontlines.updateLod(this.zoom);
     const view = {
       minX: this.camX - halfW,
       minY: this.camY - halfH,
@@ -211,6 +251,7 @@ export class MapStage {
     };
     this.labels.updateLod(this.zoom, view);
     this.industryOverlay.updateLod(this.zoom, view);
+    this.counters.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
     this.cbs.onCameraChange({ x: this.camX, y: this.camY, zoom: this.zoom });
   }
 
@@ -238,6 +279,36 @@ export class MapStage {
     this.regionsById = new Map(regions.map((r) => [r.id, r]));
     this.industryOverlay.rebuildFromRegions(regions);
     this.refreshLuts();
+  }
+
+  setAutotest(flag: boolean): void {
+    this.autotest = flag;
+  }
+
+  setPlayerTag(tag: string): void {
+    this.playerTag = tag;
+  }
+
+  setOrderToolMode(mode: OrderToolMode): void {
+    this.orderToolMode = mode;
+    this.arrowStartProvId = null;
+    this.frontlines.setArrowPreview(null);
+    this.app.canvas.style.cursor = mode === 'select' ? 'grab' : 'crosshair';
+  }
+
+  setArmyVisible(visible: boolean): void {
+    this.frontlines.setVisible(visible);
+    this.counters.setVisible(visible);
+  }
+
+  updateArmyOverlay(
+    armies: ArmySnap[],
+    brigades: BrigadeSnap[],
+    selectedBrigadeIds: readonly number[],
+    selectedArmyId: number | null,
+  ): void {
+    this.frontlines.setData(armies, brigades, selectedArmyId);
+    this.counters.setData(armies, brigades, selectedBrigadeIds, selectedArmyId);
   }
 
   selectProvince(provId: number | null): void {
@@ -322,9 +393,38 @@ export class MapStage {
   private bindInput(): void {
     const canvas = this.app.canvas;
     canvas.style.cursor = 'grab';
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('pointerdown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+
+      if (e.button === 2) {
+        const pid = this.pickAtScreen(e.clientX, e.clientY);
+        const prov = pid ? (this.provById.get(pid) ?? null) : null;
+        if (prov && !prov.isSea) this.cbs.onRightClickProvince?.(prov);
+        return;
+      }
       if (e.button !== 0) return;
+
+      if (this.orderToolMode === 'arrow') {
+        const pid = this.pickAtScreen(e.clientX, e.clientY);
+        if (pid) {
+          this.arrowStartProvId = pid;
+          canvas.setPointerCapture(e.pointerId);
+        }
+        return;
+      }
+
+      if (e.shiftKey && this.orderToolMode === 'select') {
+        this.marqueeActive = true;
+        this.marqueeStartX = sx;
+        this.marqueeStartY = sy;
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+
       this.dragging = true;
       this.dragMoved = false;
       this.lastPtrX = e.clientX;
@@ -334,6 +434,32 @@ export class MapStage {
     });
 
     canvas.addEventListener('pointermove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+
+      if (this.arrowStartProvId !== null) {
+        const pid = this.pickAtScreen(e.clientX, e.clientY);
+        if (pid && pid !== this.arrowStartProvId) {
+          this.frontlines.setArrowPreview({
+            startProvId: this.arrowStartProvId,
+            targetProvId: pid,
+            color: '#C84B31',
+          });
+        }
+        return;
+      }
+
+      if (this.marqueeActive) {
+        this.marqueeG.clear();
+        const x = Math.min(this.marqueeStartX, sx);
+        const y = Math.min(this.marqueeStartY, sy);
+        const w = Math.abs(sx - this.marqueeStartX);
+        const h = Math.abs(sy - this.marqueeStartY);
+        this.marqueeG.rect(x, y, w, h).fill({ color: 0xe2be74, alpha: 0.16 }).stroke({ width: 1.4, color: 0xf2c86b });
+        return;
+      }
+
       if (this.dragging) {
         const dx = e.clientX - this.lastPtrX;
         const dy = e.clientY - this.lastPtrY;
@@ -348,10 +474,47 @@ export class MapStage {
     });
 
     const endDrag = (e: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+
+      if (this.arrowStartProvId !== null) {
+        const startProv = this.provById.get(this.arrowStartProvId) ?? null;
+        const endPid = this.pickAtScreen(e.clientX, e.clientY);
+        const endProv = endPid ? (this.provById.get(endPid) ?? null) : null;
+        this.arrowStartProvId = null;
+        this.frontlines.setArrowPreview(null);
+        if (startProv && endProv && !endProv.isSea && startProv.id !== endProv.id) {
+          this.cbs.onArrowDragComplete?.(startProv, endProv);
+        } else if (endProv && !endProv.isSea) {
+          this.cbs.onOrderClickProvince?.(endProv);
+        }
+        return;
+      }
+
+      if (this.marqueeActive) {
+        this.marqueeActive = false;
+        this.marqueeG.clear();
+        const ids = this.counters.hitTestMarquee(this.marqueeStartX, this.marqueeStartY, sx, sy, this.playerTag);
+        this.cbs.onMarqueeSelect?.(ids);
+        return;
+      }
+
       if (!this.dragging) return;
       this.dragging = false;
-      canvas.style.cursor = 'grab';
+      canvas.style.cursor = this.orderToolMode === 'select' ? 'grab' : 'crosshair';
       if (!this.dragMoved) {
+        if (this.orderToolMode !== 'select') {
+          const pid = this.pickAtScreen(e.clientX, e.clientY);
+          const prov = pid ? (this.provById.get(pid) ?? null) : null;
+          if (prov && !prov.isSea) this.cbs.onOrderClickProvince?.(prov);
+          return;
+        }
+        const hit = this.counters.hitTestPoint(sx, sy);
+        if (hit && this.cbs.onClickCounter) {
+          this.cbs.onClickCounter(hit);
+          return;
+        }
         const pid = this.pickAtScreen(e.clientX, e.clientY);
         this.selectProvince(pid === this.selectedProvId ? null : pid);
       }

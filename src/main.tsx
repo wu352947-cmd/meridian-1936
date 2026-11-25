@@ -39,6 +39,7 @@ import {
   selectedArmyIdSig,
   selectedBrigadeIdsSig,
   selectedCountrySig,
+  simArmySig,
   simIndustrySig,
   simPlayerTagSig,
   simSeedSig,
@@ -87,6 +88,12 @@ async function bootstrap(): Promise<void> {
       selectedCountrySig.value = validTag;
       screenModeSig.value = 'game';
       activeDrawerSig.value = null;
+      selectedBrigadeIdsSig.value = [];
+      selectedArmyIdSig.value = null;
+      orderToolModeSig.value = 'select';
+      stage?.setArmyVisible(true);
+      stage?.setPlayerTag(validTag);
+      stage?.setOrderToolMode('select');
       stage?.selectProvince(null);
       stage?.highlightCountry(validTag, false);
       sim?.selectCountry(validTag);
@@ -97,6 +104,7 @@ async function bootstrap(): Promise<void> {
       activeDrawerSig.value = null;
       selectedCountrySig.value = simPlayerTagSig.value;
       screenModeSig.value = 'country_select';
+      stage?.setArmyVisible(false);
       stage?.highlightCountry(simPlayerTagSig.value, false);
     },
     setSpeed: (speed) => {
@@ -137,10 +145,15 @@ async function bootstrap(): Promise<void> {
     },
     setOrderToolMode: (mode) => {
       orderToolModeSig.value = mode;
+      stage?.setOrderToolMode(mode);
     },
     selectBrigades: (ids, armyId) => {
       selectedBrigadeIdsSig.value = ids;
       if (armyId !== undefined) selectedArmyIdSig.value = armyId;
+      const army = simArmySig.value;
+      if (army && stage) {
+        stage.updateArmyOverlay(army.armies, army.brigades, selectedBrigadeIdsSig.value, selectedArmyIdSig.value);
+      }
     },
     queueTraining: (template, deployProvId, armyId) => {
       sim?.queueTraining(template, deployProvId, armyId);
@@ -182,12 +195,22 @@ async function bootstrap(): Promise<void> {
     render(<AppShell actions={actions} />, uiRoot);
   }
 
+  const syncArmyStage = () => {
+    const army = simArmySig.value;
+    if (!army || !stage) return;
+    stage.setPlayerTag(simPlayerTagSig.value);
+    stage.updateArmyOverlay(army.armies, army.brigades, selectedBrigadeIdsSig.value, selectedArmyIdSig.value);
+  };
+
   try {
     sim = new SimClient({
       onSnapshot: (snap, dispatches, industry, governance, tech, army) => {
         applyWorldSnapshot(snap, dispatches, industry, governance, tech, army);
         if (industry && stage) {
           stage.updateIndustryRegions(industry.regions);
+        }
+        if (army && stage) {
+          syncArmyStage();
         }
       },
     });
@@ -227,6 +250,15 @@ async function bootstrap(): Promise<void> {
     const mapRoot = document.getElementById('map-root');
     if (!mapRoot) throw new Error('#map-root element missing');
 
+    const resolveActiveArmyId = (): number | null => {
+      const cur = selectedArmyIdSig.value;
+      const armySnap = simArmySig.value;
+      if (!armySnap) return null;
+      const ownArmies = armySnap.armies.filter((a) => a.owner === simPlayerTagSig.value);
+      if (cur !== null && ownArmies.some((a) => a.id === cur)) return cur;
+      return ownArmies[0]?.id ?? null;
+    };
+
     stage = await MapStage.create(mapRoot, bundle, {
       onHoverProvince: (p) => {
         hoveredProvSig.value = p;
@@ -243,11 +275,68 @@ async function bootstrap(): Promise<void> {
       onCameraChange: (cam) => {
         cameraSig.value = cam;
       },
+      onClickCounter: (hit) => {
+        if (screenModeSig.value !== 'game') return;
+        if (hit.owner === simPlayerTagSig.value) {
+          actions.selectBrigades(hit.brigadeIds, hit.armyId);
+        }
+        stage?.selectProvince(hit.provinceId);
+      },
+      onMarqueeSelect: (ids) => {
+        if (screenModeSig.value !== 'game') return;
+        const first = simArmySig.value?.brigades.find((b) => ids.includes(b.id));
+        actions.selectBrigades(ids, first?.armyId ?? null);
+      },
+      onRightClickProvince: (prov) => {
+        if (screenModeSig.value !== 'game') return;
+        const pTag = simPlayerTagSig.value;
+        const selIds = selectedBrigadeIdsSig.value;
+        if (prov.owner === pTag && selIds.length > 0) {
+          actions.marchBrigades(selIds, prov.id);
+        } else if (prov.owner !== pTag) {
+          const aid = resolveActiveArmyId();
+          if (aid !== null) actions.bindFrontline(aid, prov.owner);
+        }
+      },
+      onOrderClickProvince: (prov) => {
+        if (screenModeSig.value !== 'game') return;
+        const mode = orderToolModeSig.value;
+        const pTag = simPlayerTagSig.value;
+        if (mode === 'march') {
+          const selIds = selectedBrigadeIdsSig.value;
+          if (selIds.length > 0 && prov.owner === pTag) actions.marchBrigades(selIds, prov.id);
+        } else if (mode === 'frontline' && prov.owner !== pTag) {
+          const aid = resolveActiveArmyId();
+          if (aid !== null) {
+            actions.bindFrontline(aid, prov.owner);
+            actions.setOrderToolMode('select');
+          }
+        } else if (mode === 'arrow' && prov.owner !== pTag) {
+          const aid = resolveActiveArmyId();
+          if (aid !== null) {
+            actions.setOffensiveArrow(aid, null, prov.id);
+            actions.setOrderToolMode('select');
+          }
+        }
+      },
+      onArrowDragComplete: (startProv, endProv) => {
+        if (screenModeSig.value !== 'game') return;
+        const aid = resolveActiveArmyId();
+        if (aid !== null && endProv.owner !== simPlayerTagSig.value) {
+          const startId = startProv.owner === simPlayerTagSig.value ? startProv.id : null;
+          actions.setOffensiveArrow(aid, startId, endProv.id);
+          actions.setOrderToolMode('select');
+        }
+      },
     });
 
+    stage.setAutotest(harness.autotest);
+    stage.setPlayerTag(initialTag);
+    stage.setArmyVisible(harness.screen === 'game');
     if (simIndustrySig.value) {
       stage.updateIndustryRegions(simIndustrySig.value.regions);
     }
+    syncArmyStage();
 
     actions.setMode(harness.mapmode);
     if (harness.cam) {
