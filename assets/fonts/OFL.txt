@@ -1,0 +1,9 @@
+SIL Open Font License 1.1 (OFL-1.1)
+
+The WOFF2 font subsets in this directory are derived from:
+- LXGW WenKai Screen (https://github.com/lxgw/LxgwWenKai-Screen) - SIL OFL 1.1
+- Noto Sans CJK SC (https://github.com/notofonts/noto-cjk) - SIL OFL 1.1
+- JetBrains Mono (https://github.com/JetBrains/JetBrainsMono) - SIL OFL 1.1
+- Cinzel (https://github.com/NDISCOVER/Cinzel) - SIL OFL 1.1
+
+Full SIL OFL 1.1 text: https://openfontlicense.org/

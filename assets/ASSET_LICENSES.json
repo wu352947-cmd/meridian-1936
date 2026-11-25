@@ -1,0 +1,116 @@
+[
+  {
+    "assetId": "map_natural_earth_vector",
+    "files": [
+      "public/data/europe_1936/topology.topo.json",
+      "public/data/europe_1936/province_id.png",
+      "public/data/europe_1936/europe_1936.json"
+    ],
+    "title": "Natural Earth v5.x (1:10m Cultural & Physical Vectors)",
+    "author": "Natural Earth Contributors (Tom Patterson, Nathaniel Vaughn Kelso et al.)",
+    "sourceUrl": "https://www.naturalearthdata.com/",
+    "license": "Public Domain (CC0 Equivalent)",
+    "licenseUrl": "https://www.naturalearthdata.com/about/terms-of-use/",
+    "modifications": "Reprojected to LAEA Europe (10°E, 52°N), reconstructed into 1936 interwar European boundaries, subdivided into provinces and sea zones, simplified via Visvalingam topology."
+  },
+  {
+    "assetId": "map_natural_earth_relief",
+    "files": [
+      "public/data/europe_1936/terrain_relief.webp"
+    ],
+    "title": "Natural Earth 1:50m Shaded Relief & Hypsometric Tints (GRAY_50M_SR_OB & HYP_50M_SR)",
+    "author": "Natural Earth Contributors",
+    "sourceUrl": "https://www.naturalearthdata.com/downloads/50m-raster-data/",
+    "license": "Public Domain (CC0 Equivalent)",
+    "licenseUrl": "https://www.naturalearthdata.com/about/terms-of-use/",
+    "modifications": "Reprojected to LAEA Europe 2048x1536, blended with procedural linen paper fiber grain and coastal bathymetry."
+  },
+  {
+    "assetId": "font_lxgw_wenkai_screen",
+    "files": [
+      "public/assets/fonts/lxgw-wenkai-subset.woff2",
+      "public/assets/fonts/OFL.txt"
+    ],
+    "title": "LXGW WenKai Screen (霞鹜文楷屏幕阅读版 v1.530)",
+    "author": "LXGW (落霞孤鹜) & Fontworks Inc. (Klee One)",
+    "sourceUrl": "https://github.com/lxgw/LxgwWenKai-Screen",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://openfontlicense.org/",
+    "modifications": "Subsetted to WOFF2 covering all 1936 Europe map names, UI copy, and Latin characters via fontTools."
+  },
+  {
+    "assetId": "font_noto_sans_cjk_sc",
+    "files": [
+      "public/assets/fonts/noto-sans-sc-subset.woff2",
+      "public/assets/fonts/OFL.txt"
+    ],
+    "title": "Noto Sans CJK SC (思源黑体简体中文)",
+    "author": "Google & Adobe",
+    "sourceUrl": "https://github.com/notofonts/noto-cjk",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://openfontlicense.org/",
+    "modifications": "Subsetted to WOFF2 for UI labels and map annotations via fontTools."
+  },
+  {
+    "assetId": "font_jetbrains_mono",
+    "files": [
+      "public/assets/fonts/jetbrains-mono-subset.woff2",
+      "public/assets/fonts/OFL.txt"
+    ],
+    "title": "JetBrains Mono",
+    "author": "JetBrains s.r.o.",
+    "sourceUrl": "https://github.com/JetBrains/JetBrainsMono",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://openfontlicense.org/",
+    "modifications": "Subsetted to ASCII digits, coordinates, and tabular numeric symbols in WOFF2."
+  },
+  {
+    "assetId": "font_cinzel",
+    "files": [
+      "public/assets/fonts/cinzel-subset.woff2",
+      "public/assets/fonts/OFL.txt"
+    ],
+    "title": "Cinzel",
+    "author": "Natanael Gama (NDISCOVER)",
+    "sourceUrl": "https://github.com/NDISCOVER/Cinzel",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://openfontlicense.org/",
+    "modifications": "Subsetted to Latin European characters and cartographic numerals in WOFF2."
+  },
+  {
+    "assetId": "flags_original_neutral_svg",
+    "files": [
+      "src/assets/flags/neutralFlags.ts"
+    ],
+    "title": "Meridian 1936 Original Neutral Geometric Flags",
+    "author": "Meridian 1936 Project",
+    "sourceUrl": "https://github.com/meridian-1936",
+    "license": "MIT / CC0 (Original Work)",
+    "licenseUrl": "https://opensource.org/licenses/MIT",
+    "modifications": "Hand-coded original geometric 3:2 SVG flags compliant with neutral historical standards."
+  },
+  {
+    "assetId": "icons_original_combat_svg",
+    "files": [
+      "src/assets/icons/combatIcons.ts"
+    ],
+    "title": "Meridian 1936 Original Crossed Bayonets & Commander Silhouette SVG Icons",
+    "author": "Meridian 1936 Project",
+    "sourceUrl": "https://github.com/meridian-1936",
+    "license": "MIT / CC0 (Original Work)",
+    "licenseUrl": "https://opensource.org/licenses/MIT",
+    "modifications": "Hand-coded original vector SVG battle stamp and geometric staff silhouette icons."
+  },
+  {
+    "assetId": "icons_original_logistics_svg",
+    "files": [
+      "src/assets/icons/logisticsIcons.ts"
+    ],
+    "title": "Meridian 1936 Original Supply Hub Stars, Port Anchors, Oil Barrel & Weather SVG Icons",
+    "author": "Meridian 1936 Project",
+    "sourceUrl": "https://github.com/meridian-1936",
+    "license": "MIT / CC0 (Original Work)",
+    "licenseUrl": "https://opensource.org/licenses/MIT",
+    "modifications": "Hand-coded original vector SVG logistics markers, jerrycan supply alert, and procedural seasonal corner filigree."
+  }
+]
