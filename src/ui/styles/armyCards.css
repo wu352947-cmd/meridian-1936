@@ -1,0 +1,187 @@
+/* Meridian 1936 — Batch 06 Bottom-Left Army Cards & Transient Wipeout Badge */
+
+.army-cards-bar {
+  position: fixed;
+  bottom: 58px;
+  left: 16px;
+  pointer-events: auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 7px;
+  max-width: calc(50vw - 24px);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.army-mini-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px 5px 10px;
+  min-width: 172px;
+  background: linear-gradient(180deg, rgba(44, 37, 30, 0.95), rgba(28, 23, 19, 0.96));
+  border: 1px solid #756142;
+  border-radius: 4px;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.army-mini-card:hover {
+  border-color: #C5A059;
+  transform: translateY(-1px);
+}
+
+.army-mini-card.is-selected {
+  background: linear-gradient(180deg, rgba(72, 57, 38, 0.96), rgba(42, 33, 23, 0.97));
+  border-color: #F0CB75;
+  box-shadow: 0 0 0 1.5px rgba(240, 203, 117, 0.42), 0 6px 18px rgba(0, 0, 0, 0.52);
+}
+
+.army-card-ribbon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  border-radius: 3px 0 0 3px;
+}
+
+.army-cmd-seal {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, #3F352B, #211B16);
+  border: 1.25px solid #9B8255;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.army-cmd-mono {
+  font-size: 10px;
+  font-weight: 700;
+  color: #EBD39A;
+  letter-spacing: 0.03em;
+}
+
+.army-mini-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.army-mini-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.army-mini-name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: #F4EDE0;
+  white-space: nowrap;
+}
+
+.army-mini-cnt {
+  font-size: 10px;
+  color: #E8C77F;
+  background: rgba(16, 13, 10, 0.58);
+  padding: 0 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.army-mini-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: #C7BBA5;
+  white-space: nowrap;
+}
+
+.army-mini-trait {
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(197, 160, 89, 0.2);
+  border: 1px solid rgba(197, 160, 89, 0.45);
+  color: #F2D897;
+  font-size: 9.5px;
+}
+
+.army-arrow-play {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid #7E6A47;
+  background: #27211B;
+  color: #D7C7A8;
+  font-size: 9px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.army-arrow-play.is-running {
+  background: rgba(78, 138, 87, 0.34);
+  border-color: #6DB377;
+  color: #C4F0C8;
+}
+
+/* Lift province card cleanly above both OrderModeCapsule and ArmyCardsBar */
+.prov-card {
+  bottom: 118px;
+}
+
+/* Transient non-blocking encirclement wipeout staff seal badge */
+.wipeout-toast-wrap {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 25;
+}
+
+.wipeout-seal-badge {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(132, 38, 29, 0.95), rgba(92, 24, 18, 0.96));
+  border: 1.5px solid #E8C574;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.52);
+  color: #FCF3E1;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.wipeout-seal-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #F4D898;
+}
+
+.wipeout-close-btn {
+  background: transparent;
+  border: none;
+  color: #F4D898;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+}

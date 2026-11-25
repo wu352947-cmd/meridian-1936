@@ -11,6 +11,7 @@ import {
   type AppActions,
 } from '../store/simStore';
 import { ArmyDrawer } from './ArmyDrawer';
+import { BattleReportDrawer } from './BattleReportDrawer';
 import { GovernanceDrawer } from './GovernanceDrawer';
 import { IndustryDrawer } from './IndustryDrawer';
 
@@ -103,6 +104,8 @@ export function RightDossierDrawer({ actions, onClose }: Props) {
         <GovernanceDrawer actions={actions} />
       ) : tab === 'army' ? (
         <ArmyDrawer actions={actions} />
+      ) : tab === 'battle' ? (
+        <BattleReportDrawer actions={actions} />
       ) : (
       <div class="drawer-body">
         <div class="drawer-stamp-card">

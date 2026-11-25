@@ -10,6 +10,8 @@ import './ui/styles/techBlueprint.css';
 import './ui/styles/techBlueprintNodes.css';
 import './ui/styles/armyDrawer.css';
 import './ui/styles/armyOrders.css';
+import './ui/styles/armyCards.css';
+import './ui/styles/battleReport.css';
 
 import { render } from 'preact';
 import { loadMeridianFonts } from './assets/loadFonts';

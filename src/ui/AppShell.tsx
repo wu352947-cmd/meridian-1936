@@ -6,11 +6,13 @@ import { ProvinceInfoCard } from './ProvinceInfoCard';
 import { ScenarioSelectModal } from './ScenarioSelectModal';
 import { RightDossierDrawer } from './drawers/RightDossierDrawer';
 import { TechBlueprintModal } from './modals/TechBlueprintModal';
+import { ArmyCardsBar } from './hud/ArmyCardsBar';
 import { BottomCommandDock } from './hud/BottomCommandDock';
 import { DispatchTicker } from './hud/DispatchTicker';
 import { OrderModeCapsule } from './hud/OrderModeCapsule';
 import { TopLeftNationBrief } from './hud/TopLeftNationBrief';
 import { TopRightClockBar } from './hud/TopRightClockBar';
+import { WipeoutBanner } from './hud/WipeoutBanner';
 import {
   cameraSig,
   hoveredProvSig,
@@ -181,6 +183,8 @@ export function AppShell({ actions }: Props) {
             actions={actions}
           />
 
+          <WipeoutBanner />
+          <ArmyCardsBar actions={actions} />
           <OrderModeCapsule actions={actions} />
 
           <BottomCommandDock actions={actions} />

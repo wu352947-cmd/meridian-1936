@@ -1,0 +1,298 @@
+/* Meridian 1936 — Batch 06 Transparent Land Battle Report Drawer (§6.3.2) */
+
+.br-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.br-empty {
+  padding: 18px 14px;
+  font-size: 12px;
+  color: var(--ui-text-secondary);
+  line-height: 1.6;
+}
+
+.br-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.br-sw-btn {
+  padding: 2px 7px;
+  font-size: 10.5px;
+  border-radius: 3px;
+  background: #231E1A;
+  border: 1px solid #66563D;
+  color: var(--ui-text-secondary);
+  cursor: pointer;
+}
+
+.br-sw-btn.active {
+  background: #433422;
+  border-color: #E2BE74;
+  color: #FFF4DC;
+}
+
+.br-banner {
+  background: var(--ui-paper-card);
+  color: var(--ui-paper-ink);
+  border: 1px solid var(--ui-border-brass);
+  border-left: 4px solid #B83A2D;
+  border-radius: 3px;
+  padding: 7px 9px;
+}
+
+.br-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.br-title {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #1E1915;
+}
+
+.br-dur {
+  font-size: 11px;
+  color: #5A4B3C;
+  font-weight: 600;
+}
+
+.br-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: #4D4135;
+  margin-top: 3px;
+}
+
+.br-disabled-note {
+  font-size: 10px;
+  color: #7D6D5D;
+}
+
+.br-side-card {
+  background: #221E1A;
+  border: 1px solid rgba(110, 93, 66, 0.45);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.br-side-card.is-atk {
+  border-left: 3px solid #4E8A57;
+}
+
+.br-side-card.is-def {
+  border-left: 3px solid #B83A2D;
+}
+
+.br-side-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ui-text-primary);
+}
+
+.br-width-pill {
+  margin-left: auto;
+  font-size: 10px;
+  color: #E8C77F;
+  background: #171411;
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+.br-slot-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.br-slot-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--ui-text-muted);
+}
+
+.br-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.br-unit-chip {
+  text-align: left;
+  padding: 3px 5px;
+  border-radius: 3px;
+  background: #2B2520;
+  border: 1px solid rgba(120, 100, 72, 0.45);
+  color: var(--ui-text-primary);
+  cursor: pointer;
+}
+
+.br-unit-chip.is-sel {
+  background: rgba(197, 160, 89, 0.2);
+  border-color: #E5C170;
+}
+
+.br-unit-chip.is-low {
+  border-color: #C84A3A;
+}
+
+.br-unit-chip.is-empty {
+  text-align: center;
+  font-size: 10px;
+  color: #6F6457;
+  background: rgba(20, 17, 14, 0.55);
+  border-style: dashed;
+  cursor: default;
+  padding: 6px 4px;
+}
+
+.br-chip-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.br-chip-name {
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.br-chip-bars {
+  font-size: 9.5px;
+  margin-top: 2px;
+  display: flex;
+  gap: 3px;
+}
+
+.br-org { color: #6FC77E; }
+.br-str { color: #E4A346; }
+.br-warn { color: #EB6657; font-weight: 700; }
+.br-sep { color: #6A6054; }
+
+.br-side-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--ui-text-secondary);
+  border-top: 1px solid rgba(110, 93, 66, 0.25);
+  padding-top: 4px;
+}
+
+.br-vs-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.br-vs-track {
+  height: 7px;
+  border-radius: 3px;
+  background: #8E3127;
+  overflow: hidden;
+  border: 1px solid #473A2B;
+}
+
+.br-vs-atk {
+  height: 100%;
+  background: linear-gradient(90deg, #3D7447, #68B074);
+}
+
+.br-vs-caption {
+  text-align: center;
+  font-size: 10.5px;
+  color: #E8C77F;
+}
+
+.br-breakdown {
+  background: #1C1916;
+  border: 1px solid #756142;
+  border-radius: 4px;
+  padding: 7px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.br-bd-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #F4EDE0;
+  font-weight: 600;
+}
+
+.br-bd-result strong {
+  color: #F1CB75;
+}
+
+.br-bd-guard {
+  font-size: 10px;
+  color: var(--ui-text-secondary);
+}
+
+.br-factor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.br-factor-pill {
+  background: #27221D;
+  border: 1px solid rgba(110, 93, 66, 0.35);
+  border-radius: 3px;
+  padding: 3px 5px;
+  font-size: 9.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--ui-text-secondary);
+}
+
+.br-factor-pill strong {
+  font-size: 10.5px;
+  color: var(--ui-text-primary);
+}
+
+.br-factor-pill.is-pos strong { color: #7ED48C; }
+.br-factor-pill.is-neg strong { color: #ED7264; }
+.br-factor-pill.is-off { opacity: 0.58; }
+
+.br-badge-armor {
+  font-size: 10px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: rgba(197, 160, 89, 0.18);
+  border: 1px solid #C5A059;
+  color: #F6DA93;
+}
+
+.br-badge-warn {
+  font-size: 10px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: rgba(184, 58, 45, 0.24);
+  border: 1px solid #C94D3E;
+  color: #F5B5AD;
+}

@@ -88,5 +88,17 @@
     "license": "MIT / CC0 (Original Work)",
     "licenseUrl": "https://opensource.org/licenses/MIT",
     "modifications": "Hand-coded original geometric 3:2 SVG flags compliant with neutral historical standards."
+  },
+  {
+    "assetId": "icons_original_combat_svg",
+    "files": [
+      "src/assets/icons/combatIcons.ts"
+    ],
+    "title": "Meridian 1936 Original Crossed Bayonets & Commander Silhouette SVG Icons",
+    "author": "Meridian 1936 Project",
+    "sourceUrl": "https://github.com/meridian-1936",
+    "license": "MIT / CC0 (Original Work)",
+    "licenseUrl": "https://opensource.org/licenses/MIT",
+    "modifications": "Hand-coded original vector SVG battle stamp and geometric staff silhouette icons."
   }
 ]

@@ -3,6 +3,7 @@
  */
 import { getCountryInfo } from '../../data/countries1936';
 import { MAX_ARMY_BRIGADES } from '../../sim/data/brigadeTemplates';
+import { getCommanderDef, getCommandersForNation } from '../../sim/data/commanders1936';
 import { getSimProvince } from '../../sim/data/provinces1936';
 import type { ArmySystemSnapshot } from '../../sim/systems/armyTypes';
 import {
@@ -22,6 +23,7 @@ interface Props {
 export function ArmyForcesTab({ tag, armySnap, actions }: Props) {
   const ownArmies = armySnap.armies.filter((a) => a.owner === tag);
   const ownBrigades = armySnap.brigades.filter((b) => b.owner === tag);
+  const commanders = getCommandersForNation(tag);
   const selectedArmyId = selectedArmyIdSig.value ?? ownArmies[0]?.id ?? null;
   const selectedIds = new Set(selectedBrigadeIdsSig.value);
   const toolMode = orderToolModeSig.value;
@@ -51,6 +53,7 @@ export function ArmyForcesTab({ tag, armySnap, actions }: Props) {
             const isSel = activeArmy?.id === a.id;
             const targetInfo = a.frontline ? getCountryInfo(a.frontline.targetTag) : null;
             const arrowTarget = a.arrow ? getSimProvince(a.arrow.targetProvId) : null;
+            const cmd = getCommanderDef(a.commanderId);
             return (
               <div
                 key={a.id}
@@ -66,6 +69,9 @@ export function ArmyForcesTab({ tag, armySnap, actions }: Props) {
                 </div>
 
                 <div class="army-order-status">
+                  <span class="army-status-pill">
+                    {cmd ? `${cmd.nameZh}（${cmd.traits.map((t) => t.nameZh).join('·')}）` : '未委任将领'}
+                  </span>
                   {a.frontline && targetInfo ? (
                     <span class="army-status-pill is-front">
                       战线：{targetInfo.shortZh}（{a.frontline.friendlyProvIds.length}省）
@@ -74,12 +80,30 @@ export function ArmyForcesTab({ tag, armySnap, actions }: Props) {
                     <span class="army-status-pill">未绑定战线</span>
                   )}
                   {a.arrow && arrowTarget && (
-                    <span class="army-status-pill is-arrow">进攻→{arrowTarget.nameZh}</span>
+                    <span class="army-status-pill is-arrow">
+                      {a.arrow.active ? '进攻→' : '待命→'}{arrowTarget.nameZh}
+                    </span>
                   )}
                 </div>
 
                 {isSel && (
                   <div class="army-item-actions" onClick={(e) => e.stopPropagation()}>
+                    <select
+                      class="army-select army-select-sm"
+                      value={a.commanderId ?? ''}
+                      title="为该集团军指派将领（最多 1 名）"
+                      onChange={(e) => {
+                        const v = (e.target as HTMLSelectElement).value;
+                        actions.assignCommander(a.id, v || null);
+                      }}
+                    >
+                      <option value="">无将领</option>
+                      {commanders.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nameZh} · {c.traits.map((t) => t.summaryZh).join(' / ')}
+                        </option>
+                      ))}
+                    </select>
                     {armySnap.neighborTags.length > 0 && (
                       <select
                         class="army-select army-select-sm"
@@ -106,6 +130,15 @@ export function ArmyForcesTab({ tag, armySnap, actions }: Props) {
                     >
                       画箭头
                     </button>
+                    {a.arrow && (
+                      <button
+                        type="button"
+                        class="staff-btn army-mini-btn"
+                        onClick={() => actions.toggleArrowActive(a.id)}
+                      >
+                        {a.arrow.active ? '暂停攻势' : '执行攻势'}
+                      </button>
+                    )}
                     {a.arrow && (
                       <button
                         type="button"
