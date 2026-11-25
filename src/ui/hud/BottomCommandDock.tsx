@@ -5,6 +5,7 @@ import {
   activeDrawerSig,
   autotestModeSig,
   simGovernanceSig,
+  simLogisticsSig,
   simTechSig,
   type AppActions,
 } from '../store/simStore';
@@ -48,10 +49,12 @@ export function BottomCommandDock({ actions }: Props) {
   const noAnim = autotestModeSig.value;
   const gov = simGovernanceSig.value;
   const tech = simTechSig.value;
+  const logi = simLogisticsSig.value;
   const hasLawReady = gov
     ? [...gov.economyOptions, ...gov.conscriptionOptions, ...gov.tradeOptions].some((o) => o.canSwitch)
     : false;
   const hasIdleTechSlot = tech ? tech.slots.some((s) => s.techId === null) : true;
+  const hasSupplyAlert = logi ? logi.lowSupplyBrigades + logi.starvingBrigades > 0 : false;
 
   return (
     <nav class="walnut-dock" aria-label="参谋部公文卷宗坞站与地图透镜">
@@ -60,7 +63,9 @@ export function BottomCommandDock({ actions }: Props) {
           const active = activeDrawer === t.id;
           const showDot =
             !active &&
-            ((t.id === 'directives' && hasLawReady) || (t.id === 'tech' && hasIdleTechSlot));
+            ((t.id === 'directives' && hasLawReady) ||
+              (t.id === 'tech' && hasIdleTechSlot) ||
+              (t.id === 'logistics' && hasSupplyAlert));
           return (
             <button
               key={t.id}

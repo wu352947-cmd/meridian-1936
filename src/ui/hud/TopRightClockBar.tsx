@@ -4,6 +4,7 @@ import {
   tickToDate,
   type SimSpeed,
 } from '../../sim/core/ClockCalendar';
+import { getTheaterSeasonSummary } from '../../sim/systems/weatherSystem';
 import { showCreditsSig } from '../mapStore';
 import {
   simCrisisSig,
@@ -66,6 +67,19 @@ export function TopRightClockBar({ actions }: Props) {
   const paused = simPausedSig.value;
   const crisis = simCrisisSig.value;
   const dateParts = tickToDate(tick);
+  const season = getTheaterSeasonSummary(tick);
+  const seasonShort =
+    season.eastCondition === 'winter'
+      ? '东欧 · 严冬'
+      : season.eastCondition === 'mud'
+        ? '东欧 · 泥泞'
+        : '气候正常';
+  const seasonCls =
+    season.eastCondition === 'winter'
+      ? 'is-winter'
+      : season.eastCondition === 'mud'
+        ? 'is-mud'
+        : '';
 
   return (
     <section class={`hud-top-right${paused ? ' is-paused' : ''}`} aria-label="参谋怀表与危机表盘">
@@ -74,6 +88,12 @@ export function TopRightClockBar({ actions }: Props) {
           <span class="clock-date mono-num">{formatDateZh(tick)}</span>
           <span class="clock-slot">
             {dateParts.slotZh} <span class="mono-num">{formatClockTime(tick)}</span>
+          </span>
+          <span
+            class={`clock-season-tag ${seasonCls}${season.isNight ? ' is-night' : ''}`}
+            title={`${season.activeDetailZh}（下次变化：${season.nextChangeDateIso} ${season.nextChangeLabelZh}）`}
+          >
+            {seasonShort}
           </span>
           {paused && <span class="clock-paused-tag">已暂停</span>}
         </div>

@@ -14,6 +14,7 @@ import { ArmyDrawer } from './ArmyDrawer';
 import { BattleReportDrawer } from './BattleReportDrawer';
 import { GovernanceDrawer } from './GovernanceDrawer';
 import { IndustryDrawer } from './IndustryDrawer';
+import { LogisticsDrawer } from './LogisticsDrawer';
 
 interface Props {
   actions: AppActions;
@@ -104,6 +105,8 @@ export function RightDossierDrawer({ actions, onClose }: Props) {
         <GovernanceDrawer actions={actions} />
       ) : tab === 'army' ? (
         <ArmyDrawer actions={actions} />
+      ) : tab === 'logistics' ? (
+        <LogisticsDrawer actions={actions} />
       ) : tab === 'battle' ? (
         <BattleReportDrawer actions={actions} />
       ) : (
