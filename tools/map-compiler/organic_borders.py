@@ -7,7 +7,7 @@ from collections import defaultdict
 import numpy as np
 import shapefile
 from shapely.geometry import LineString, Point, Polygon, box, shape
-from shapely.ops import polygonize, transform as shp_transform, unary_union
+from shapely.ops import linemerge, polygonize, transform as shp_transform, unary_union
 from shapely.strtree import STRtree
 from shapely.validation import make_valid
 
@@ -54,16 +54,17 @@ def load_admin1_units() -> list[dict]:
 def load_split_rivers() -> list[LineString]:
     """Load major & regional European rivers as pixel-space LineStrings for province splitting."""
     frame = box(0, 0, WIDTH, HEIGHT)
-    lines: list[LineString] = []
-    for rel in [
-        "ne_10m_rivers_lake_centerlines/ne_10m_rivers_lake_centerlines.shp",
-        "ne_10m_rivers_europe/ne_10m_rivers_europe.shp",
-    ]:
+    raw_lines: list[LineString] = []
+    sources = [
+        ("ne_10m_rivers_lake_centerlines/ne_10m_rivers_lake_centerlines.shp", 6),
+        ("ne_10m_rivers_europe/ne_10m_rivers_europe.shp", 11),
+    ]
+    for rel, max_sr in sources:
         sf = shapefile.Reader(str(RAW_DIR / rel))
         f = [x[0] for x in sf.fields[1:]]
         i_sr = f.index("scalerank")
         for sr in sf.iterShapeRecords():
-            if int(sr.record[i_sr] or 9) > 6:
+            if int(sr.record[i_sr] or 99) > max_sr:
                 continue
             bx = sr.shape.bbox
             if bx[2] < -24 or bx[0] > 60 or bx[3] < 26 or bx[1] > 72:
@@ -73,8 +74,11 @@ def load_split_rivers() -> list[LineString]:
                 continue
             parts = [g] if g.geom_type == "LineString" else [x for x in getattr(g, "geoms", []) if x.geom_type == "LineString"]
             for ln in parts:
-                if ln.length >= 25.0:
-                    lines.append(ln.simplify(1.8, preserve_topology=False))
+                if ln.length >= 10.0:
+                    raw_lines.append(ln)
+    merged = linemerge(raw_lines) if raw_lines else LineString()
+    merged_parts = [merged] if merged.geom_type == "LineString" else [x for x in getattr(merged, "geoms", []) if x.geom_type == "LineString"]
+    lines = [ln.simplify(1.4, preserve_topology=False) for ln in merged_parts if ln.length >= 26.0]
     return lines
 
 
@@ -227,51 +231,71 @@ def _extract_topological_chains(noded_lines) -> list[list[tuple[float, float]]]:
 
 
 def _fractal_displace(pts: list[tuple[float, float]], scale: float = 1.0) -> list[tuple[float, float]]:
-    """Deterministic endpoint-pinned midpoint-displacement fractal curve for hand-drawn borders."""
+    """Deterministic endpoint-pinned band-limited smooth organic curve for artificial cuts.
+
+    Uses a low-frequency asymmetric spectral bridge (half-wave lobes >= ~16px, zero high-freq
+    sawtooth jitter) so interior borders flow smoothly like hand-drawn cartographic lines
+    without collapsing back into straight Voronoi polygons.
+    """
     a, b = pts[0], pts[-1]
     rev = _snap_key(a) > _snap_key(b)
     work = list(reversed(pts)) if rev else list(pts)
 
+    p0, p1 = work[0], work[-1]
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    total_len = math.hypot(dx, dy)
+    if total_len < 14.0:
+        return pts
+
     seed_bytes = hashlib.sha256(
-        f"{round(work[0][0],2)},{round(work[0][1],2)}->{round(work[-1][0],2)},{round(work[-1][1],2)}".encode()
+        f"{round(p0[0],2)},{round(p0[1],2)}->{round(p1[0],2)},{round(p1[1],2)}".encode()
     ).digest()
     rng = np.random.default_rng(int.from_bytes(seed_bytes[:8], "little"))
 
-    ln = LineString(work)
-    total_len = ln.length
-    if total_len < 12.0:
-        return pts
+    ux, uy = dx / total_len, dy / total_len
+    nx, ny = -uy, ux
+    s_sign = -1.0 if scale < 0 else 1.0
+    amp = min(total_len * 0.118, 10.2) * abs(scale)
 
-    # Recursive midpoint displacement (3-4 levels depending on length) with fixed endpoints
-    depth = 4 if total_len >= 55.0 else (3 if total_len >= 26.0 else 2)
-    cur = [work[0], work[-1]]
-    base_amp = min(total_len * 0.16, 12.5) * scale
-    for lvl in range(depth):
-        amp = base_amp * (0.56 ** lvl)
-        nxt = [cur[0]]
-        for i in range(len(cur) - 1):
-            p0, p1 = cur[i], cur[i + 1]
-            dx, dy = p1[0] - p0[0], p1[1] - p0[1]
-            seg = math.hypot(dx, dy) or 1.0
-            nx, ny = -dy / seg, dx / seg
-            mx, my = (p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5
-            # Guarantee non-trivial organic bend at coarse levels, lively crinkles at fine levels
-            mag = float(rng.uniform(0.45, 1.0)) if lvl <= 1 else float(rng.uniform(0.25, 1.0))
-            sign = float(rng.choice([-1.0, 1.0]))
-            off = sign * mag * min(amp, seg * 0.24)
-            nxt.append((mx + nx * off, my + ny * off))
-            nxt.append(p1)
-        cur = nxt
+    # Low-frequency modes only: shortest half-wave lobe >= ~15px prevents jagged fractal spikes
+    m_max = max(2, min(5, int(total_len / 15.0) + 1))
+    weights: list[tuple[int, float]] = []
+    for m in range(1, m_max + 1):
+        if m == 1:
+            w = float(rng.choice([-1.0, 1.0])) * float(rng.uniform(0.45, 0.95))
+        elif m == 2:
+            w = float(rng.choice([-1.0, 1.0])) * float(rng.uniform(0.40, 0.90))
+        else:
+            w = float(rng.uniform(-0.85, 0.85))
+        weights.append((m, w * (m ** -1.18) * s_sign))
 
-    cur[0] = work[0]
-    cur[-1] = work[-1]
+    # Gentle monotonic phase warp breaks periodic sine regularity into natural asymmetric bends
+    warp = float(rng.uniform(-0.14, 0.14))
+    n_steps = max(10, min(32, int(round(total_len / 4.2))))
+    ts = [i / n_steps for i in range(n_steps + 1)]
+    raw_d: list[float] = []
+    for t in ts:
+        tw = t + warp * math.sin(math.pi * t)
+        raw_d.append(sum(w * math.sin(m * math.pi * tw) for m, w in weights))
+
+    peak = max(abs(v) for v in raw_d) or 1.0
+    target_peak = amp * float(rng.uniform(0.76, 1.0))
+    gain = target_peak / peak
+
+    cur: list[tuple[float, float]] = []
+    for t, dv in zip(ts, raw_d):
+        off = dv * gain
+        cur.append((p0[0] + ux * (total_len * t) + nx * off, p0[1] + uy * (total_len * t) + ny * off))
+
+    cur[0] = p0
+    cur[-1] = p1
     if rev:
         cur.reverse()
     return cur
 
 
 def jitter_shared_edges(cells: list, outer_geom) -> list:
-    """Apply watertight shared-edge fractal jitter to artificial interior Voronoi cuts."""
+    """Apply watertight gentle hand-drawn curvature to artificial interior Voronoi cuts."""
     if len(cells) <= 1:
         return cells
     outer_b = outer_geom.boundary
@@ -288,20 +312,19 @@ def jitter_shared_edges(cells: list, outer_geom) -> list:
         ln = line_objs[idx]
         if ln.length < 14.0 or _snap_key(ch[0]) == _snap_key(ch[-1]):
             continue
-        # Preserve coastlines, national borders & already-sinuous admin-1 / river lines verbatim
+        # Preserve coastlines, national borders & already-curved admin-1 / river lines verbatim
         p25, p50, p75 = ln.interpolate(0.25, True), ln.interpolate(0.5, True), ln.interpolate(0.75, True)
         if outer_b.distance(p25) < 1.3 and outer_b.distance(p50) < 1.3 and outer_b.distance(p75) < 1.3:
             continue
         chord = math.hypot(ch[-1][0] - ch[0][0], ch[-1][1] - ch[0][1])
-        max_seg = max(math.hypot(ch[k + 1][0] - ch[k][0], ch[k + 1][1] - ch[k][1]) for k in range(len(ch) - 1))
-        if len(ch) >= 6 and max_seg < 18.0 and ln.length / max(chord, 1.0) > 1.032:
+        if len(ch) >= 4 and ln.length / max(chord, 1.0) > 1.012:
             continue
 
-        # Try fractal displacement at decreasing amplitudes until strictly intersection-free
+        # Try gentle displacement (both bend directions, decreasing amplitude) until intersection-free
         end_keys = {_snap_key(ch[0]), _snap_key(ch[-1])}
         others = [final_lines[j] for j in range(len(final_lines)) if j != idx]
         tree = STRtree(others)
-        for mult in (1.0, 0.58, 0.30, 0.14):
+        for mult in (1.0, -1.0, 0.65, -0.65, 0.38, -0.38, 0.20, -0.20):
             cand_pts = _fractal_displace(ch, scale=mult)
             cand = LineString(cand_pts)
             if not cand.is_simple or not cand.within(outer_buf):

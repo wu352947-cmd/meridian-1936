@@ -211,11 +211,10 @@ def _subdivide_part_organically(
     pieces = _extract_admin1_partition(part, admin1_units, adm1_tree)
 
     if len(pieces) > k:
-        merged = agglomerative_merge(pieces, k, major_pts)
-        # If disconnected components prevented reaching k, allow minor Voronoi only if still way off
-        return jitter_shared_edges(merged, part)
+        # Pure Natural Earth admin-1 boundaries: preserve verbatim without artificial jitter
+        return agglomerative_merge(pieces, k, major_pts)
 
-    # Fewer admin-1 units than k: allocate k across admin-1 units, split along rivers then jittered Voronoi
+    # Fewer admin-1 units than k: allocate k across admin-1 units, split along rivers then gently curved Voronoi
     alloc = _allocate_counts(pieces, k)
     out_cells: list = []
     for piece, kp in zip(pieces, alloc):
@@ -234,7 +233,7 @@ def _subdivide_part_organically(
             sub_cells = jitter_shared_edges(sub_cells, rp_geom)
             out_cells.extend(sub_cells)
 
-    return jitter_shared_edges(out_cells, part)
+    return out_cells
 
 
 def subdivide_all(countries: dict[str, object], fixed_defs: list, places: list[dict]):
