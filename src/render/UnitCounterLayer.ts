@@ -3,6 +3,7 @@
  * and deterministic screen-space grid repulsion so counters NEVER overlap or hide stack numbers.
  */
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { getCountryInfo } from '../data/countries1936';
 import type { BrigadeType } from '../sim/data/brigadeTemplates';
 import type { ArmySnap, BrigadeSnap } from '../sim/systems/armyTypes';
 import type { EuropeMapMeta, ProvinceRecord } from '../types/map';
@@ -13,6 +14,7 @@ import {
   COUNTER_W,
   drawArmyCrestBadge,
   drawCardstockCounter,
+  type CounterRelation,
 } from './counterArt';
 
 const LEAD_PRIORITY: Record<BrigadeType, number> = {
@@ -60,6 +62,9 @@ interface LayoutBox {
   hasManualOverride: boolean;
   armyColor: string;
   isLod0: boolean;
+  relation: CounterRelation;
+  inCombat: boolean;
+  alpha: number;
 }
 
 export class UnitCounterLayer {
@@ -68,6 +73,9 @@ export class UnitCounterLayer {
   private readonly cardGroup = new Container();
   private readonly provById = new Map<number, ProvinceRecord>();
 
+  private playerTag = 'GER';
+  private enemyTags = new Set<string>();
+  private frontlineTargetTags = new Set<string>();
   private brigades: BrigadeSnap[] = [];
   private armies: ArmySnap[] = [];
   private selectedBrigadeIds = new Set<number>();
@@ -84,6 +92,15 @@ export class UnitCounterLayer {
     this.root.visible = visible;
   }
 
+  setDiplomacyContext(playerTag: string, wars: ReadonlyArray<[string, string]>): void {
+    this.playerTag = playerTag;
+    this.enemyTags.clear();
+    for (const [a, b] of wars) {
+      if (a === playerTag) this.enemyTags.add(b);
+      else if (b === playerTag) this.enemyTags.add(a);
+    }
+  }
+
   setData(
     armies: ArmySnap[],
     brigades: BrigadeSnap[],
@@ -94,7 +111,23 @@ export class UnitCounterLayer {
     this.brigades = brigades;
     this.selectedBrigadeIds = new Set(selectedBrigadeIds);
     this.selectedArmyId = selectedArmyId;
+    this.frontlineTargetTags.clear();
+    for (const a of armies) {
+      if (a.owner === this.playerTag && a.frontline) {
+        this.frontlineTargetTags.add(a.frontline.targetTag);
+      }
+    }
     this.rebuild();
+  }
+
+  private resolveRelation(owner: string): CounterRelation {
+    if (owner === this.playerTag) return 'own';
+    if (this.enemyTags.has(owner)) return 'enemy';
+    const pFac = getCountryInfo(this.playerTag).faction;
+    const oFac = getCountryInfo(owner).faction;
+    if (pFac !== 'neutral' && pFac === oFac) return 'ally';
+    if (this.enemyTags.size === 0 && this.frontlineTargetTags.has(owner)) return 'enemy';
+    return 'neutral';
   }
 
   updateCamera(camX: number, camY: number, zoom: number, vw: number, vh: number): void {
@@ -180,13 +213,16 @@ export class UnitCounterLayer {
           selected: box.selected,
           hasManualOverride: box.hasManualOverride,
           armyColor: box.armyColor,
+          relation: box.relation,
+          inCombat: box.inCombat,
         });
         const txt = new Text({ text: String(box.item.brigadeIds.length), style: COUNT_STYLE });
         txt.resolution = 2;
         txt.anchor.set(0.5, 0.5);
-        txt.position.set(15.5, -3.5);
+        txt.position.set(16.5, -4.0);
         cont.addChild(g, txt);
       }
+      cont.alpha = box.alpha;
       cont.position.set(cx, cy);
       this.cardGroup.addChild(cont);
     }
@@ -242,6 +278,9 @@ export class UnitCounterLayer {
         hasManualOverride: list.some((b) => b.manualOverride),
         armyColor: (armyId !== null ? armyColorById.get(armyId) : undefined) ?? '#8A7148',
         isLod0: true,
+        relation: this.resolveRelation(first.owner),
+        inCombat: list.some((b) => b.inCombatBattleId !== null),
+        alpha: 1,
       });
     }
     return boxes.sort((a, b) => a.key.localeCompare(b.key));
@@ -249,7 +288,11 @@ export class UnitCounterLayer {
 
   private buildProvinceStackBoxes(armyColorById: Map<number, string>, vw: number, vh: number): LayoutBox[] {
     const stacks = new Map<string, BrigadeSnap[]>();
+    const hasActiveConflict = this.enemyTags.size > 0 || this.frontlineTargetTags.size > 0;
     for (const b of this.brigades) {
+      const rel = this.resolveRelation(b.owner);
+      // Mid-zoom declutter: hide unrelated neutral countries when player is at war or watching a frontline
+      if (rel === 'neutral' && hasActiveConflict) continue;
       const k = `${b.provinceId}:${b.owner}`;
       const list = stacks.get(k) ?? [];
       list.push(b);
@@ -274,6 +317,7 @@ export class UnitCounterLayer {
       }
       const ids = list.map((b) => b.id);
       const armyId = first.armyId;
+      const rel = this.resolveRelation(first.owner);
       boxes.push({
         key, ax: sx, ay: sy, x: sx, y: sy, w: COUNTER_W, h: COUNTER_H,
         item: { owner: first.owner, armyId, provinceId: first.provinceId, brigadeIds: ids, sx, sy, w: COUNTER_W, h: COUNTER_H },
@@ -284,6 +328,9 @@ export class UnitCounterLayer {
         hasManualOverride: list.some((b) => b.manualOverride),
         armyColor: (armyId !== null ? armyColorById.get(armyId) : undefined) ?? '#8A7148',
         isLod0: false,
+        relation: rel,
+        inCombat: list.some((b) => b.inCombatBattleId !== null),
+        alpha: rel === 'neutral' ? 0.42 : 1,
       });
     }
     return boxes.sort((a, b) => a.key.localeCompare(b.key));

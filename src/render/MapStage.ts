@@ -11,15 +11,17 @@ import {
 import type { EuropeMapMeta, MapMode, ProvinceRecord } from '../types/map';
 import type { LoadedMapBundle } from './loadMapData';
 import { BorderMeshBuilder } from './BorderMeshBuilder';
+import { CombatBubbleLayer } from './CombatBubbleLayer';
 import { CurvedLabelLayer } from './CurvedLabelLayer';
 import { FrontlineArrowLayer } from './FrontlineArrowLayer';
 import { IndustryOverlayLayer } from './IndustryOverlayLayer';
+import { PocketLayer } from './PocketLayer';
 import { TerrainDetailLayer } from './TerrainDetailLayer';
 import { UnitCounterLayer, type CounterHitItem } from './UnitCounterLayer';
 import { buildOwnerIndexMap, fillProvinceLuts } from './lutPalette';
 import { createProvinceLutShader } from './shaders/provinceLut';
 import type { ArmySnap, BrigadeSnap } from '../sim/systems/armyTypes';
-import type { CombatSystemSnapshot } from '../sim/systems/combatTypes';
+import type { CombatSystemSnapshot, ProvinceBattleSnap } from '../sim/systems/combatTypes';
 import type { RegionDynamicSnap } from '../sim/systems/industryTypes';
 import type { OrderToolMode } from '../ui/store/simStore';
 
@@ -28,6 +30,7 @@ export interface MapStageCallbacks {
   onSelectProvince: (prov: ProvinceRecord | null) => void;
   onCameraChange: (cam: { x: number; y: number; zoom: number }) => void;
   onClickCounter?: (hit: CounterHitItem) => void;
+  onClickBattle?: (battle: ProvinceBattleSnap) => void;
   onMarqueeSelect?: (brigadeIds: number[]) => void;
   onRightClickProvince?: (prov: ProvinceRecord) => void;
   onOrderClickProvince?: (prov: ProvinceRecord) => void;
@@ -63,9 +66,11 @@ export class MapStage {
   private readonly terrainDetails: TerrainDetailLayer;
   private readonly borders: BorderMeshBuilder;
   private readonly frontlines: FrontlineArrowLayer;
+  private readonly pockets: PocketLayer;
   private readonly labels: CurvedLabelLayer;
   private readonly industryOverlay: IndustryOverlayLayer;
   private readonly counters: UnitCounterLayer;
+  private readonly combatBubbles: CombatBubbleLayer;
   private readonly marqueeG = new Graphics();
   private readonly cbs: MapStageCallbacks;
 
@@ -186,19 +191,22 @@ export class MapStage {
       this.pickW,
       this.pickH,
     );
+    this.pockets = new PocketLayer(this.borders.getDecodedArcs());
     this.labels = new CurvedLabelLayer(this.meta);
     this.industryOverlay = new IndustryOverlayLayer();
     this.counters = new UnitCounterLayer(this.meta);
+    this.combatBubbles = new CombatBubbleLayer(this.meta);
 
     this.world.addChild(
       mapMesh,
       this.terrainDetails.root,
       this.borders.root,
       this.frontlines.root,
+      this.pockets.root,
       this.labels.root,
       this.industryOverlay.root,
     );
-    this.app.stage.addChild(this.world, this.counters.root, this.marqueeG);
+    this.app.stage.addChild(this.world, this.counters.root, this.combatBubbles.root, this.marqueeG);
 
     this.app.ticker.add((t) => {
       if (!this.autotest) this.frontlines.advanceFlow(t.deltaMS / 1000);
@@ -270,8 +278,10 @@ export class MapStage {
       { zoom: this.zoom, minX: view.minX, minY: view.minY, vw, vh },
       this.labels.getPlacedScreenBoxes(),
     );
+    this.pockets.updateLod(this.zoom);
     this.industryOverlay.updateLod(this.zoom, view);
     this.counters.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
+    this.combatBubbles.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
     this.cbs.onCameraChange({ x: this.camX, y: this.camY, zoom: this.zoom });
   }
 
@@ -318,7 +328,9 @@ export class MapStage {
 
   setArmyVisible(visible: boolean): void {
     this.frontlines.setVisible(visible);
+    this.pockets.setVisible(visible);
     this.counters.setVisible(visible);
+    this.combatBubbles.setVisible(visible);
   }
 
   updateArmyOverlay(
@@ -327,10 +339,16 @@ export class MapStage {
     selectedBrigadeIds: readonly number[],
     selectedArmyId: number | null,
     combat?: CombatSystemSnapshot | null,
+    selectedBattleProvId: number | null = null,
   ): void {
     if (combat) {
       this.controllerByProv = new Map(combat.occupiedProvinces.map((o) => [o.provId, o.controller]));
       this.refreshLuts();
+      this.counters.setDiplomacyContext(this.playerTag, combat.wars);
+      this.pockets.setData(combat.pockets);
+      this.combatBubbles.setData(combat.battles, this.playerTag, selectedBattleProvId);
+    } else {
+      this.counters.setDiplomacyContext(this.playerTag, []);
     }
     this.frontlines.setData(armies, brigades, selectedArmyId, this.controllerByProv);
     this.counters.setData(armies, brigades, selectedBrigadeIds, selectedArmyId);
@@ -536,6 +554,11 @@ export class MapStage {
           const pid = this.pickAtScreen(e.clientX, e.clientY);
           const prov = pid ? (this.provById.get(pid) ?? null) : null;
           if (prov && !prov.isSea) this.cbs.onOrderClickProvince?.(prov);
+          return;
+        }
+        const battleHit = this.combatBubbles.hitTestPoint(sx, sy);
+        if (battleHit && this.cbs.onClickBattle) {
+          this.cbs.onClickBattle(battleHit);
           return;
         }
         const hit = this.counters.hitTestPoint(sx, sy);

@@ -156,7 +156,14 @@ async function bootstrap(): Promise<void> {
       if (armyId !== undefined) selectedArmyIdSig.value = armyId;
       const army = simArmySig.value;
       if (army && stage) {
-        stage.updateArmyOverlay(army.armies, army.brigades, selectedBrigadeIdsSig.value, selectedArmyIdSig.value);
+        stage.updateArmyOverlay(
+          army.armies,
+          army.brigades,
+          selectedBrigadeIdsSig.value,
+          selectedArmyIdSig.value,
+          simCombatSig.value,
+          selectedBattleProvIdSig.value,
+        );
       }
     },
     queueTraining: (template, deployProvId, armyId) => {
@@ -201,6 +208,7 @@ async function bootstrap(): Promise<void> {
     openBattleReport: (provId) => {
       selectedBattleProvIdSig.value = provId;
       activeDrawerSig.value = 'battle';
+      syncArmyStage();
     },
   };
 
@@ -213,7 +221,14 @@ async function bootstrap(): Promise<void> {
     const army = simArmySig.value;
     if (!army || !stage) return;
     stage.setPlayerTag(simPlayerTagSig.value);
-    stage.updateArmyOverlay(army.armies, army.brigades, selectedBrigadeIdsSig.value, selectedArmyIdSig.value, simCombatSig.value);
+    stage.updateArmyOverlay(
+      army.armies,
+      army.brigades,
+      selectedBrigadeIdsSig.value,
+      selectedArmyIdSig.value,
+      simCombatSig.value,
+      selectedBattleProvIdSig.value,
+    );
   };
 
   try {
@@ -297,6 +312,10 @@ async function bootstrap(): Promise<void> {
           actions.selectBrigades(hit.brigadeIds, hit.armyId);
         }
         stage?.selectProvince(hit.provinceId);
+      },
+      onClickBattle: (battle) => {
+        if (screenModeSig.value !== 'game') return;
+        actions.openBattleReport(battle.provinceId);
       },
       onMarqueeSelect: (ids) => {
         if (screenModeSig.value !== 'game') return;

@@ -6,10 +6,12 @@ import { Graphics } from 'pixi.js';
 import { getCountryInfo } from '../data/countries1936';
 import type { BrigadeType } from '../sim/data/brigadeTemplates';
 
-export const COUNTER_W = 44;
-export const COUNTER_H = 28;
+export const COUNTER_W = 46;
+export const COUNTER_H = 31;
 export const ARMY_BADGE_W = 56;
 export const ARMY_BADGE_H = 24;
+
+export type CounterRelation = 'own' | 'ally' | 'enemy' | 'neutral';
 
 export function hexToInt(hex: string): number {
   const n = Number.parseInt(hex.replace('#', ''), 16);
@@ -191,52 +193,85 @@ export interface CounterDrawSpec {
   selected: boolean;
   hasManualOverride: boolean;
   armyColor?: string;
+  relation?: CounterRelation;
+  inCombat?: boolean;
 }
 
-/** Draw complete 44x28px hard-cardstock tactical counter centered at (0, 0). */
+/** Draw complete 46x31px hard-cardstock tactical counter centered at (0, 0) with clear friend/ally/foe styling. */
 export function drawCardstockCounter(g: Graphics, spec: CounterDrawSpec): void {
   const x = -COUNTER_W * 0.5;
   const y = -COUNTER_H * 0.5;
+  const rel: CounterRelation = spec.relation ?? 'own';
   const themeColor = hexToInt(getCountryInfo(spec.owner).color);
+
+  const cardBg =
+    rel === 'own' ? 0xf4ede0
+    : rel === 'ally' ? 0xdde7ef
+    : rel === 'enemy' ? 0xcabdb0
+    : 0xddd6c7;
+  const frameColor =
+    rel === 'enemy' ? 0xb83a2d
+    : rel === 'ally' ? 0x2f5c7e
+    : rel === 'neutral' ? 0x564e44
+    : 0x1a1612;
+  const frameWidth = rel === 'enemy' ? 1.85 : rel === 'ally' ? 1.45 : 1.2;
 
   // Subtle drop shadow
   g.roundRect(x + 1.5, y + 2, COUNTER_W, COUNTER_H, 3.5).fill({ color: 0x120e0b, alpha: 0.44 });
 
-  // Selection brass/vermilion halo
+  // Selection brass halo or combat pulse ring
   if (spec.selected) {
-    g.roundRect(x - 2, y - 2, COUNTER_W + 4, COUNTER_H + 4, 5).stroke({ width: 2.2, color: 0xf2c86b, alpha: 0.98 });
+    g.roundRect(x - 2.2, y - 2.2, COUNTER_W + 4.4, COUNTER_H + 4.4, 5).stroke({ width: 2.3, color: 0xf2c86b, alpha: 0.98 });
+  } else if (spec.inCombat) {
+    g.roundRect(x - 1.5, y - 1.5, COUNTER_W + 3, COUNTER_H + 3, 4.5).stroke({ width: 1.5, color: 0xd9563f, alpha: 0.85 });
   }
 
-  // Main hard cardstock body
-  g.roundRect(x, y, COUNTER_W, COUNTER_H, 3.5).fill(0xefe8d8);
+  // Main hard cardstock body (differentiates own / ally / enemy / neutral immediately)
+  g.roundRect(x, y, COUNTER_W, COUNTER_H, 3.5).fill(cardBg);
 
-  // Left country theme band (x..x+12, y..y+19)
-  g.roundRect(x + 1, y + 1, 12, 18.5, 2.2).fill(themeColor);
-  drawMiniFlag(g, spec.owner, x + 2, y + 6.5, 10, 7);
+  // Subtle top relation ribbon for enemy/ally quick scan
+  if (rel === 'enemy') {
+    g.rect(x + 1, y + 1, COUNTER_W - 2, 2.4).fill({ color: 0xb83a2d, alpha: 0.88 });
+  } else if (rel === 'ally') {
+    g.rect(x + 1, y + 1, COUNTER_W - 2, 2.2).fill({ color: 0x3b6e94, alpha: 0.82 });
+  }
 
-  // Optional tiny army color top-left accent stripe
-  if (spec.armyColor) {
-    g.rect(x + 1, y + 1, 12, 2.6).fill(hexToInt(spec.armyColor));
+  // Left country theme band + mini neutral flag
+  g.roundRect(x + 1.5, y + 2, 12, 18, 2.0).fill(themeColor);
+  drawMiniFlag(g, spec.owner, x + 2.5, y + 7.5, 10, 7);
+
+  // Army color top-left accent stripe for own forces
+  if (spec.armyColor && rel === 'own') {
+    g.rect(x + 1.5, y + 2, 12, 3.0).fill(hexToInt(spec.armyColor));
   }
 
   // Center NATO geometric box (18x15px)
-  drawNatoSymbol(g, spec.leadType, x + 13.5, y + 2.5, 17.5, 15.5);
+  drawNatoSymbol(g, spec.leadType, x + 14.5, y + 3.5, 17.5, 15.2);
 
-  // Bottom twin 3px status bars: top emerald Org, bottom amber Strength
+  // Bottom bold twin 4px status bars (Org top, Strength bottom); <30% turns warning cinnabar
   const barX = x + 2;
   const barW = COUNTER_W - 4;
-  g.rect(barX, y + 20, barW, 6.5).fill(0x211d18);
-  const orgW = Math.max(1, Math.round(barW * Math.max(0, Math.min(1, spec.orgRatio))));
-  const strW = Math.max(1, Math.round(barW * Math.max(0, Math.min(1, spec.strRatio))));
-  g.rect(barX, y + 20, orgW, 3).fill(0x3cb868);
-  g.rect(barX, y + 23.5, strW, 3).fill(0xe49f38);
+  const orgClamped = Math.max(0, Math.min(1, spec.orgRatio));
+  const strClamped = Math.max(0, Math.min(1, spec.strRatio));
+  g.rect(barX, y + 20.5, barW, 9).fill(0x1f1b16);
+  const orgW = Math.max(1, Math.round(barW * orgClamped));
+  const strW = Math.max(1, Math.round(barW * strClamped));
+  const orgCol = orgClamped < 0.3 ? 0xcf3d2e : 0x45a362;
+  const strCol = strClamped < 0.3 ? 0xcf3d2e : 0xe49f38;
+  g.rect(barX, y + 20.5, orgW, 4).fill(orgCol);
+  g.rect(barX, y + 25.2, strW, 4).fill(strCol);
 
-  // Crisp 1px deep ink outer frame
-  g.roundRect(x, y, COUNTER_W, COUNTER_H, 3.5).stroke({ width: 1.15, color: 0x1a1612 });
+  // Crisp outer frame
+  g.roundRect(x, y, COUNTER_W, COUNTER_H, 3.5).stroke({ width: frameWidth, color: frameColor });
+
+  // Enemy top-right cinnabar corner chevron pip
+  if (rel === 'enemy') {
+    g.poly([x + COUNTER_W - 6.5, y + 1, x + COUNTER_W - 1, y + 1, x + COUNTER_W - 1, y + 6.5]).fill(0xb83a2d);
+  }
 
   // Manual override golden lock pip (top-right corner)
   if (spec.hasManualOverride) {
-    g.circle(x + COUNTER_W - 3.5, y + 3.5, 2.6).fill(0xeab84b).stroke({ width: 0.8, color: 0x1a1612 });
+    g.circle(x + COUNTER_W - 3.8, y + 3.8, 2.7).fill(0xeab84b).stroke({ width: 0.8, color: 0x1a1612 });
   }
 }
 
