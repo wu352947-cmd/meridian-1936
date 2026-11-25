@@ -2,6 +2,7 @@
  * Single-battle 6-hour tick resolution engine (Carbon §4.9.2–4.9.4).
  * Deterministic slot maintenance, 25% reserve swap, simultaneous fire, parry/crit & armor suppression.
  */
+import { tickToDate } from '../core/ClockCalendar';
 import { FIXED_SCALE } from '../core/FixedMath';
 import type { SeededRng } from '../core/SeededRng';
 import { BRIGADE_TEMPLATES, getCombatSlotsForBattle } from '../data/brigadeTemplates';
@@ -18,6 +19,8 @@ import {
 import type { BattleSlotUnitSnap, CombatUnitBreakdown, ProvinceBattleSnap } from './combatTypes';
 import type { EquipmentType } from './industryTypes';
 import type { NationModifiers } from './modifierTypes';
+import type { BrigadeSupplyEffect } from './supplyTypes';
+import { getProvinceSeasonCondition, getWeatherCombatEffect } from './weatherSystem';
 
 export interface ActiveBattleState {
   id: number;
@@ -43,6 +46,7 @@ export interface BattleStepContext {
   getModifiers: (tag: string) => Readonly<NationModifiers>;
   addCasualties: (tag: string, men: number) => void;
   recordEquipmentLoss: (tag: string, eqType: EquipmentType, units: number) => void;
+  getSupplyEffect?: (b: BrigadeState) => BrigadeSupplyEffect;
 }
 
 function getEffectivePiercing(b: BrigadeState, mods: Readonly<NationModifiers>): number {
@@ -165,11 +169,14 @@ export function resolveBattleTick(
   const atkMaxPrc = Math.max(0, ...atkActive.map((id) => getEffectivePiercing(ctx.getBrigade(id)!, atkMods)));
   const defMaxPrc = Math.max(0, ...defActive.map((id) => getEffectivePiercing(ctx.getBrigade(id)!, defMods)));
 
+  const isNight = tickToDate(tick).isNight;
   const breakdowns = new Map<number, CombatUnitBreakdown>();
   const buildBd = (bid: number, isAttacking: boolean): CombatUnitBreakdown => {
     const b = ctx.getBrigade(bid)!;
     const fromPid = isAttacking ? (battle.attackerFromProv.get(bid) ?? b.provinceId) : battle.provinceId;
     const army = b.armyId !== null ? ctx.getArmy(b.armyId) : undefined;
+    const sup = ctx.getSupplyEffect?.(b);
+    const wfx = getWeatherCombatEffect(battle.provinceId, b.owner, b.template, isAttacking, tick);
     const bd = computeUnitCombatBreakdown({
       brigadeId: b.id,
       nameZh: b.nameZh,
@@ -186,6 +193,11 @@ export function resolveBattleTick(
       enemyMaxPiercing: isAttacking ? defMaxPrc : atkMaxPrc,
       commanderId: army?.commanderId ?? null,
       nationMods: isAttacking ? atkMods : defMods,
+      supply: sup
+        ? { multPermille: sup.combatMultPermille, supplyValue: sup.supplyValue, status: sup.status, noteZh: sup.noteZh }
+        : { multPermille: FIXED_SCALE, supplyValue: b.supplyValue, status: b.supplyStatus, noteZh: `S=${b.supplyValue} 正常` },
+      weather: { multPermille: wfx.attackMultPermille, labelZh: wfx.labelZh, noteZh: wfx.noteZh },
+      isNight,
     });
     breakdowns.set(bid, bd);
     return bd;
@@ -265,6 +277,8 @@ export function resolveBattleTick(
     ? Math.round(atkActive.reduce((s, id) => s + (ctx.getBrigade(id)?.planPermille ?? 0), 0) / atkActive.length)
     : 0;
 
+  const provSeason = getProvinceSeasonCondition(battle.provinceId, tick);
+  const seasonNoteZh = provSeason === 'winter' ? '严冬' : provSeason === 'mud' ? '泥泞' : '晴朗';
   battle.lastSnap = {
     id: battle.id, provinceId: battle.provinceId, provinceNameZh: prov.nameZh, terrain: prov.terrain,
     river: worstRiverCrossing(rivers), fortLevel, attackerTag: battle.attackerTag, defenderTag: battle.defenderTag,
@@ -278,6 +292,7 @@ export function resolveBattleTick(
     defenderSupport: battle.defenderSupport.map((id) => toSlotSnap(id, false)),
     defenderReserves: battle.defenderReserves.map((id) => toSlotSnap(id, false)),
     defenderEntrenchAvgPermille: defEntAvg, attackerPlanAvgPermille: atkPlanAvg,
+    isNight, seasonNoteZh,
   };
 
   // Check collapse conditions (§4.9.5)

@@ -14,12 +14,15 @@ import type { CombatSystemSnapshot, EncircledPocketSnap, WipeoutEvent } from './
 import type { EquipmentType } from './industryTypes';
 import type { NationModifiers } from './modifierTypes';
 import { computeEncirclementWipeout, findRetreatProvince, scanEncircledPockets } from './retreatPocket';
+import type { BrigadeSupplyEffect } from './supplyTypes';
 
 export interface CombatTickAdapter {
   getModifiers: (tag: string) => Readonly<NationModifiers>;
   addCasualties: (tag: string, men: number) => void;
   refundEquipment: (tag: string, eqType: EquipmentType, units: number) => void;
   onDispatch?: (kind: 'info' | 'alert', textZh: string, focusTag?: string) => void;
+  getSupplyEffect?: (b: BrigadeState) => BrigadeSupplyEffect;
+  onControllerChanged?: (provId: number, newController: string, tick: number) => void;
 }
 
 function warKey(a: string, b: string): string {
@@ -149,6 +152,8 @@ export class LandCombatSystem {
       executeOffensiveArrowsTick(army.getAllArmies(), (id) => army.getBrigade(id), {
         getController: this.getController,
         areAtWar: this.areAtWar,
+        tick,
+        rng,
         onInitiateAttack: (b, targetPid) => {
           const res = this.startOrJoinAttack(b, targetPid, tick, army);
           if (res === 'occupy_empty') {
@@ -169,6 +174,7 @@ export class LandCombatSystem {
         getArmy: (id) => army.getArmy(id),
         getModifiers: adapter.getModifiers,
         addCasualties: adapter.addCasualties,
+        getSupplyEffect: adapter.getSupplyEffect,
         recordEquipmentLoss: (tag, eq, u) => {
           const rec = this.destroyedEq.get(tag) ?? {};
           rec[eq] = (rec[eq] ?? 0) + u;
@@ -252,6 +258,7 @@ export class LandCombatSystem {
 
     // Advance vanguard attackers into conquered province & flip controller
     this.setController(battle.provinceId, battle.attackerTag);
+    adapter.onControllerChanged?.(battle.provinceId, battle.attackerTag, tick);
     const vanguards = attackers.filter((a) => a.orgPermille > 0);
     const moveList = vanguards.slice(0, Math.max(1, Math.min(4, vanguards.length)));
     for (const a of moveList) {

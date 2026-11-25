@@ -16,6 +16,8 @@ import {
 import { getCommanderCombatBonusPermille } from '../data/commanders1936';
 import type { CombatMultiplierFactor, CombatUnitBreakdown } from './combatTypes';
 import type { NationModifiers } from './modifierTypes';
+import type { SupplyStatus } from './supplyTypes';
+import { WEATHER_DEFINES } from './weatherSystem';
 
 export interface SlotPartition {
   frontline: number[];
@@ -64,6 +66,9 @@ export interface BreakdownInput {
   enemyMaxPiercing: number;
   commanderId: string | null;
   nationMods: Readonly<NationModifiers>;
+  supply?: { multPermille: number; supplyValue: number; status: SupplyStatus; noteZh?: string };
+  weather?: { multPermille: number; labelZh: string; noteZh?: string };
+  isNight?: boolean;
 }
 
 function getTechCombatMod(template: BrigadeType, isAttacking: boolean, mods: Readonly<NationModifiers>): { atk: number; guard: number } {
@@ -103,6 +108,22 @@ export function computeUnitCombatBreakdown(inp: BreakdownInput): CombatUnitBreak
   const exposedArtPenalty = tmpl.role === 'support' && !inp.hasFrontlineCover;
   const exposedGuardMult = exposedArtPenalty ? COMBAT_DEFINES.exposedArtDefMult : FIXED_SCALE;
 
+  const supplyEnabled = inp.supply !== undefined;
+  const supplyMult = supplyEnabled ? clampInt(inp.supply!.multPermille, 200, FIXED_SCALE) : FIXED_SCALE;
+  const supplyLabel = !supplyEnabled
+    ? '后勤补给'
+    : inp.supply!.status === 'starving'
+      ? '补给(断粮)'
+      : inp.supply!.status === 'low'
+        ? `补给 S=${inp.supply!.supplyValue}`
+        : `补给 S=${inp.supply!.supplyValue}`;
+
+  const weatherEnabled = inp.weather !== undefined;
+  const weatherMult = weatherEnabled ? clampInt(inp.weather!.multPermille, 200, FIXED_SCALE) : FIXED_SCALE;
+
+  const nightEnabled = typeof inp.isNight === 'boolean';
+  const nightMult = nightEnabled && inp.isNight ? WEATHER_DEFINES.nightLandAttackMultPermille : FIXED_SCALE;
+
   const factors: CombatMultiplierFactor[] = [
     { key: 'strength', labelZh: '满编率', multPermille: strMult, enabled: true },
     { key: 'terrain', labelZh: `地形(${TERRAIN_ZH[inp.terrain]})`, multPermille: terrainMult, enabled: true },
@@ -115,9 +136,30 @@ export function computeUnitCombatBreakdown(inp: BreakdownInput): CombatUnitBreak
       enabled: true,
     },
     { key: 'cmd_tech', labelZh: '科技/指挥官', multPermille: doctrineCmdAtkMult, enabled: true },
-    { key: 'supply', labelZh: '后勤补给', multPermille: FIXED_SCALE, enabled: false, noteZh: '未启用' },
+    {
+      key: 'supply',
+      labelZh: supplyLabel,
+      multPermille: supplyMult,
+      enabled: supplyEnabled,
+      noteZh: supplyEnabled ? (inp.supply!.noteZh ?? '补给正常') : '未启用',
+    },
+    ...(weatherEnabled
+      ? [{
+          key: 'season',
+          labelZh: inp.weather!.labelZh,
+          multPermille: weatherMult,
+          enabled: true,
+          noteZh: inp.weather!.noteZh,
+        }]
+      : []),
     { key: 'air', labelZh: '制空支援', multPermille: FIXED_SCALE, enabled: false, noteZh: '未启用' },
-    { key: 'night', labelZh: '夜战修正', multPermille: FIXED_SCALE, enabled: false, noteZh: '未启用' },
+    {
+      key: 'night',
+      labelZh: nightEnabled ? (inp.isNight ? '夜间作战' : '昼间作战') : '夜战修正',
+      multPermille: nightMult,
+      enabled: nightEnabled,
+      noteZh: nightEnabled ? (inp.isNight ? '夜间 ×0.75' : '昼间无罚') : '未启用',
+    },
   ];
 
   let effAtkFixed = baseAtkFixed;
@@ -128,6 +170,7 @@ export function computeUnitCombatBreakdown(inp: BreakdownInput): CombatUnitBreak
   effGuardFixed = mulFixed(effGuardFixed, planOrEntrenchMult);
   effGuardFixed = mulFixed(effGuardFixed, doctrineCmdGuardMult);
   effGuardFixed = mulFixed(effGuardFixed, exposedGuardMult);
+  effGuardFixed = mulFixed(effGuardFixed, supplyMult);
 
   return {
     brigadeId: inp.brigadeId,

@@ -70,6 +70,8 @@ export interface ProvinceBattleSnap {
   defenderReserves: BattleSlotUnitSnap[];
   defenderEntrenchAvgPermille: number;
   attackerPlanAvgPermille: number;
+  isNight?: boolean;
+  seasonNoteZh?: string;
 }
 
 export interface EncircledPocketSnap {

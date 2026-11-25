@@ -78,7 +78,13 @@ function emitSnapshot(forceFull = false): void {
             tech: engine.getTechSnapshot(),
           }
         : {}),
-      ...(sendArmy ? { army: engine.getArmySnapshot(), combat: engine.getCombatSnapshot() } : {}),
+      ...(sendArmy
+        ? {
+            army: engine.getArmySnapshot(),
+            combat: engine.getCombatSnapshot(),
+            logistics: engine.getLogisticsSnapshot(),
+          }
+        : {}),
     },
     [buf],
   );

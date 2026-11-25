@@ -11,6 +11,7 @@ import type { ArmySystemSnapshot } from '../../sim/systems/armyTypes';
 import type { CombatSystemSnapshot } from '../../sim/systems/combatTypes';
 import type { GovernanceLawId, GovernanceSlot, GovernanceSnapshot } from '../../sim/systems/governanceTypes';
 import type { BuildingType, EquipmentType, IndustrySnapshot } from '../../sim/systems/industryTypes';
+import type { LogisticsSnapshot } from '../../sim/systems/supplyTypes';
 import type { TechSnapshot } from '../../sim/systems/techTypes';
 import type { MapMode } from '../../types/map';
 
@@ -42,6 +43,9 @@ export const simGovernanceSig = signal<GovernanceSnapshot | null>(null);
 export const simTechSig = signal<TechSnapshot | null>(null);
 export const simArmySig = signal<ArmySystemSnapshot | null>(null);
 export const simCombatSig = signal<CombatSystemSnapshot | null>(null);
+export const simLogisticsSig = signal<LogisticsSnapshot | null>(null);
+export const simSupplyByProvSig = signal<Uint8Array | null>(null);
+export const colorblindModeSig = signal<boolean>(false);
 
 export function applyWorldSnapshot(
   snap: WorldSnapshot,
@@ -51,6 +55,7 @@ export function applyWorldSnapshot(
   tech?: TechSnapshot,
   army?: ArmySystemSnapshot,
   combat?: CombatSystemSnapshot,
+  logistics?: LogisticsSnapshot,
 ): void {
   const byTag: Record<string, SimNationSnapshot> = {};
   for (const n of snap.nations) byTag[n.tag] = n;
@@ -61,12 +66,14 @@ export function applyWorldSnapshot(
     simCrisisSig.value = snap.crisisPermille;
     simPlayerTagSig.value = snap.playerTag;
     simNationsSig.value = byTag;
+    if (snap.supplyByProv) simSupplyByProvSig.value = snap.supplyByProv;
     if (dispatches) simDispatchesSig.value = dispatches;
     if (industry) simIndustrySig.value = industry;
     if (governance) simGovernanceSig.value = governance;
     if (tech) simTechSig.value = tech;
     if (army) simArmySig.value = army;
     if (combat) simCombatSig.value = combat;
+    if (logistics) simLogisticsSig.value = logistics;
     simReadySig.value = true;
   });
 }
@@ -109,5 +116,7 @@ export interface AppActions {
   clearOffensiveArrow: (armyId: number) => void;
   toggleArrowActive: (armyId: number, active?: boolean) => void;
   assignCommander: (armyId: number, commanderId: string | null) => void;
+  toggleArmyMotorizedSupply: (armyId: number, enabled?: boolean) => void;
+  toggleColorblindMode: (enabled?: boolean) => void;
   openBattleReport: (provId: number) => void;
 }

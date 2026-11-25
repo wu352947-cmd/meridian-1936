@@ -37,6 +37,7 @@ import {
   activeDrawerSig,
   applyWorldSnapshot,
   autotestModeSig,
+  colorblindModeSig,
   industrySubTabSig,
   orderToolModeSig,
   screenModeSig,
@@ -207,6 +208,13 @@ async function bootstrap(): Promise<void> {
     assignCommander: (armyId, commanderId) => {
       sim?.assignCommander(armyId, commanderId);
     },
+    toggleArmyMotorizedSupply: (armyId, enabled) => {
+      sim?.toggleArmyMotorizedSupply(armyId, enabled);
+    },
+    toggleColorblindMode: (enabled) => {
+      const next = typeof enabled === 'boolean' ? enabled : !colorblindModeSig.value;
+      colorblindModeSig.value = next;
+    },
     openBattleReport: (provId) => {
       selectedBattleProvIdSig.value = provId;
       activeDrawerSig.value = 'battle';
@@ -235,8 +243,8 @@ async function bootstrap(): Promise<void> {
 
   try {
     sim = new SimClient({
-      onSnapshot: (snap, dispatches, industry, governance, tech, army, combat) => {
-        applyWorldSnapshot(snap, dispatches, industry, governance, tech, army, combat);
+      onSnapshot: (snap, dispatches, industry, governance, tech, army, combat, logistics) => {
+        applyWorldSnapshot(snap, dispatches, industry, governance, tech, army, combat, logistics);
         if (industry && stage) {
           stage.updateIndustryRegions(industry.regions);
         }

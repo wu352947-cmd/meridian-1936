@@ -455,6 +455,14 @@ export class IndustrySystem {
     return line ? Math.floor(line.stockpileFixed / FIXED_SCALE) : 0;
   }
 
+  getDailyProdFixed(tag: string, eqType: EquipmentType): number {
+    return this.nations.get(tag)?.lines[eqType]?.lastDailyUnitsFixed ?? 0;
+  }
+
+  getRegionInfra(regionId: number): number {
+    return this.regionById.get(regionId)?.infra ?? 2;
+  }
+
   /** Consume up to `units` whole pieces of equipment from stockpile; returns actual units taken. */
   consumeEquipment(tag: string, eqType: EquipmentType, units: number): number {
     const line = this.nations.get(tag)?.lines[eqType];

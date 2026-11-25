@@ -34,7 +34,8 @@ export type CommandType =
   | 'SET_OFFENSIVE_ARROW'
   | 'CLEAR_OFFENSIVE_ARROW'
   | 'TOGGLE_ARROW_ACTIVE'
-  | 'ASSIGN_COMMANDER';
+  | 'ASSIGN_COMMANDER'
+  | 'TOGGLE_ARMY_MOTORIZED_SUPPLY';
 
 export interface InitScenarioPayload {
   scenarioId: '1936';
@@ -182,6 +183,11 @@ export interface AssignCommanderPayload {
   commanderId: string | null;
 }
 
+export interface ToggleArmyMotorizedSupplyPayload {
+  armyId: number;
+  enabled?: boolean;
+}
+
 export type GameCommandPayload =
   | InitScenarioPayload
   | SelectCountryPayload
@@ -209,7 +215,8 @@ export type GameCommandPayload =
   | SetOffensiveArrowPayload
   | ClearOffensiveArrowPayload
   | ToggleArrowActivePayload
-  | AssignCommanderPayload;
+  | AssignCommanderPayload
+  | ToggleArmyMotorizedSupplyPayload;
 
 export interface GameCommand<T extends CommandType = CommandType> {
   tick: number;

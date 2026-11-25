@@ -30,6 +30,7 @@ import {
   type SetSpeedPayload,
   type StartResearchPayload,
   type SwitchProductionLinePayload,
+  type ToggleArmyMotorizedSupplyPayload,
   type ToggleArrowActivePayload,
   type ToggleAutoTradePayload,
   type TogglePausePayload,
@@ -47,11 +48,16 @@ import type { GovernanceSnapshot } from '../systems/governanceTypes';
 import { IndustrySystem, type IndustryLawTechMods } from '../systems/industrySystem';
 import { BUILDING_SPECS, type IndustrySnapshot } from '../systems/industryTypes';
 import { LandCombatSystem } from '../systems/landCombatSystem';
+import { buildLogisticsSnapshot, resolveMotorizedSupplyFunding } from '../systems/logisticsSnapshot';
 import { ManpowerSystem } from '../systems/manpowerSystem';
 import { applyMockWarPreset } from '../systems/mockWarPresets';
 import { ALL_MODIFIER_KEYS, createEmptyModifiers, type NationModifiers } from '../systems/modifierTypes';
+import { countBrigadesByOwnerProv, evaluateSupplyEffect, stepBrigadeSupplyTick } from '../systems/supplyPenalties';
+import { SupplyNetwork } from '../systems/supplySystem';
+import type { LogisticsSnapshot } from '../systems/supplyTypes';
 import { TechSystem } from '../systems/techSystem';
 import type { TechSnapshot } from '../systems/techTypes';
+import { getWeatherMarchMultPermille, getWinterAttritionMultPermille } from '../systems/weatherSystem';
 
 export interface TickerDispatch {
   id: number;
@@ -82,6 +88,8 @@ export class SimEngine {
   private readonly tech = new TechSystem();
   private readonly army = new ArmySystem();
   private readonly combat = new LandCombatSystem();
+  private readonly supply = new SupplyNetwork();
+  private fundedMotorizedTags = new Set<string>();
   private dispatches: TickerDispatch[] = [];
   private nextDispatchId = 1;
   private industryRevision = 1;
@@ -170,6 +178,7 @@ export class SimEngine {
 
     this.army.reset();
     this.combat.reset();
+    this.supply.reset();
     if (opts.demoFrontline) {
       this.army.applyDemoFrontline(opts.demoFrontline);
     }
@@ -178,6 +187,8 @@ export class SimEngine {
         this.governance.setWarFlags(tag, { atWar: true });
       });
     }
+    this.recomputeSupplyNetwork(false);
+    this.refreshBrigadeSupplyPreview();
 
     this.syncNationsFromSystems();
     this.pushDispatch(
@@ -246,9 +257,17 @@ export class SimEngine {
     this.tick += 1;
     this.seqNo += 1;
 
-    // Batch 05/06: 6-hour tick land movement, frontline dispatch & 6h land combat resolution
+    // Batch 05/06/07: 6-hour tick land movement (with mud & low-supply modifiers), frontline dispatch & combat
+    const preStackCounts = countBrigadesByOwnerProv(this.army.getAllBrigades());
     this.army.stepTick((tag) => this.getCombinedModifiers(tag).army_speed, {
       getController: this.combat.getController,
+      getSupplyCap: (pid) => this.supply.getCap(pid),
+      getMarchMultPermille: (b, toProvId) => {
+        const n = preStackCounts.get(`${b.owner}:${b.provinceId}`) ?? 1;
+        const supMult = evaluateSupplyEffect(this.supply.getSupply(b.provinceId), n, b.zeroSupplyTicks).speedMultPermille;
+        const wxMult = getWeatherMarchMultPermille(toProvId, this.tick);
+        return mulFixed(supMult, wxMult);
+      },
       onBeforeEnterProvince: (b, nextProvId) => {
         const ctrl = this.combat.getController(nextProvId);
         if (ctrl === b.owner) return 'allow';
@@ -262,22 +281,40 @@ export class SimEngine {
         const ctrl = this.combat.getController(provId);
         if (ctrl !== b.owner && this.combat.areAtWar(b.owner, ctrl)) {
           this.combat.setController(provId, b.owner);
+          this.supply.markOccupied(provId, this.tick);
+          this.recomputeSupplyNetwork(false);
           this.army.refreshFrontlines(this.combat.getController);
           this.combat.scanPockets(this.army);
         }
       },
     });
 
+    const combatStackCounts = countBrigadesByOwnerProv(this.army.getAllBrigades());
     const combatChanged = this.combat.stepTick(this.tick, this.rng, this.army, {
       getModifiers: (tag) => this.getCombinedModifiers(tag),
       addCasualties: (tag, men) => this.manpower.addCasualties(tag, men),
       refundEquipment: (tag, eq, units) => this.industry.refundEquipment(tag, eq, units),
       onDispatch: (kind, textZh, focusTag) => this.pushDispatch(kind, textZh, focusTag),
+      getSupplyEffect: (b) => {
+        const n = combatStackCounts.get(`${b.owner}:${b.provinceId}`) ?? 1;
+        return evaluateSupplyEffect(this.supply.getSupply(b.provinceId), n, b.zeroSupplyTicks);
+      },
+      onControllerChanged: (provId, _newCtrl, t) => {
+        this.supply.markOccupied(provId, t);
+        this.recomputeSupplyNetwork(false);
+      },
     });
     if (combatChanged) {
       this.syncNationsFromSystems();
       this.industryRevision += 1;
     }
+
+    // Batch 07: per-tick supply status refresh & starvation attrition (S=0 for >=8 ticks)
+    stepBrigadeSupplyTick(this.army.getAllBrigades(), {
+      getSupply: (pid) => this.supply.getSupply(pid),
+      getAttritionMultPermille: (pid, ownerTag, tmpl) =>
+        getWinterAttritionMultPermille(pid, ownerTag, tmpl, this.tick),
+    });
     this.armyRevision += 1;
 
     // Daily boundary (00:00 each day)
@@ -328,8 +365,10 @@ export class SimEngine {
     const completed = this.industry.stepDaily(this.getCohesionMap());
     // Batch 05 daily brigade training progression & deployment
     const deployedEvents = this.army.stepDaily((tag) => this.getCombinedModifiers(tag).training_time);
-    // Batch 06 daily encircled pocket scan
+    // Batch 06 daily encircled pocket scan + Batch 07 daily 00:00 multi-source Dijkstra supply refresh
     this.combat.scanPockets(this.army);
+    this.recomputeSupplyNetwork(true);
+    this.refreshBrigadeSupplyPreview();
     this.syncNationsFromSystems();
     this.industryRevision += 1;
     this.armyRevision += 1;
@@ -695,6 +734,38 @@ export class SimEngine {
         if (this.army.assignCommander(actor, armyId, commanderId)) this.armyRevision += 1;
         break;
       }
+      case 'TOGGLE_ARMY_MOTORIZED_SUPPLY': {
+        const { armyId, enabled } = cmd.payload as ToggleArmyMotorizedSupplyPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.army.toggleArmyMotorizedSupply(actor, armyId, enabled)) {
+          this.recomputeSupplyNetwork(false);
+          this.refreshBrigadeSupplyPreview();
+          this.armyRevision += 1;
+        }
+        break;
+      }
+    }
+  }
+
+  recomputeSupplyNetwork(consumeDailyTrucks: boolean): void {
+    this.fundedMotorizedTags = resolveMotorizedSupplyFunding(this.army, this.industry, consumeDailyTrucks);
+    this.supply.recompute({
+      tick: this.tick,
+      getController: this.combat.getController,
+      getRegionInfra: (rid) => this.industry.getRegionInfra(rid),
+      motorizedTags: this.fundedMotorizedTags,
+    });
+  }
+
+  private refreshBrigadeSupplyPreview(): void {
+    const brigs = this.army.getAllBrigades();
+    const counts = countBrigadesByOwnerProv(brigs);
+    for (const b of brigs) {
+      const s = this.supply.getSupply(b.provinceId);
+      const n = counts.get(`${b.owner}:${b.provinceId}`) ?? 1;
+      const eff = evaluateSupplyEffect(s, n, b.zeroSupplyTicks);
+      b.supplyValue = eff.supplyValue;
+      b.supplyStatus = eff.status;
     }
   }
 
@@ -744,6 +815,7 @@ export class SimEngine {
     this.tech.mixHash(mix);
     this.army.mixHash(mix);
     this.combat.mixHash(mix);
+    this.supply.mixHash(mix);
     return h >>> 0;
   }
 
@@ -765,6 +837,7 @@ export class SimEngine {
       stateHash: this.computeStateHash(),
       seqNo: this.seqNo,
       nations: this.nations,
+      supplyByProv: this.supply.supplyByProv,
     };
   }
 
@@ -792,13 +865,21 @@ export class SimEngine {
     return this.combat.getSnapshot();
   }
 
-  /** Test & scenario hooks for deterministic Batch 06 combat verification. */
+  getLogisticsSnapshot(tag = this.playerTag): LogisticsSnapshot {
+    return buildLogisticsSnapshot(tag, this.army, this.industry, this.supply, this.fundedMotorizedTags);
+  }
+
+  /** Test & scenario hooks for deterministic Batch 06/07 verification. */
   getArmySystemForTest(): ArmySystem {
     return this.army;
   }
 
   getCombatSystemForTest(): LandCombatSystem {
     return this.combat;
+  }
+
+  getSupplyNetworkForTest(): SupplyNetwork {
+    return this.supply;
   }
 
   declareMockWar(tagA: string, tagB: string): void {

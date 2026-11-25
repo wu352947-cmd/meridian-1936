@@ -12,6 +12,8 @@ export const SNAPSHOT_VERSION = 2;
 const HEADER_WORDS = 16; // 64 bytes
 const NATION_STRIDE = 16; // 16 Int32 = 64 bytes per nation
 export const MAX_SNAPSHOT_NATIONS = 48;
+export const SUPPLY_SECTION_OFFSET = 4096;
+export const MAX_SUPPLY_BYTES = 1024;
 
 export interface SimNationSnapshot {
   tag: string;
@@ -44,6 +46,8 @@ export interface WorldSnapshot {
   stateHash: number;
   seqNo: number;
   nations: SimNationSnapshot[];
+  /** Per-province integer supply S_p in [0..100] indexed by provId (Batch 07). */
+  supplyByProv?: Uint8Array;
 }
 
 export function encodeSnapshot(snap: WorldSnapshot, buf: ArrayBuffer): void {
@@ -69,7 +73,8 @@ export function encodeSnapshot(snap: WorldSnapshot, buf: ArrayBuffer): void {
   view[11] = snap.rngState[3] | 0;
   view[12] = snap.stateHash | 0;
   view[13] = snap.seqNo | 0;
-  view[14] = 0;
+  const supplyLen = snap.supplyByProv ? Math.min(snap.supplyByProv.length, MAX_SUPPLY_BYTES) : 0;
+  view[14] = supplyLen | 0;
   view[15] = 0;
 
   for (let i = 0; i < count; i++) {
@@ -91,6 +96,11 @@ export function encodeSnapshot(snap: WorldSnapshot, buf: ArrayBuffer): void {
     view[base + 13] = n.airWings | 0;
     view[base + 14] = (n.researchSlots & 0xff) | ((REGIME_CODE[n.regime] & 0x0f) << 8) | (n.isMajor ? 0x1000 : 0);
     view[base + 15] = 0;
+  }
+
+  if (snap.supplyByProv && supplyLen > 0) {
+    const outBytes = new Uint8Array(buf, SUPPLY_SECTION_OFFSET, supplyLen);
+    outBytes.set(snap.supplyByProv.subarray(0, supplyLen));
   }
 }
 
@@ -114,6 +124,7 @@ export function decodeSnapshot(buf: ArrayBuffer, tagOrder: readonly string[]): W
   ];
   const stateHash = (view[12] ?? 0) >>> 0;
   const seqNo = view[13] ?? 0;
+  const supplyLen = Math.min(Math.max(0, view[14] ?? 0), MAX_SUPPLY_BYTES);
 
   const nations: SimNationSnapshot[] = [];
   for (let i = 0; i < count; i++) {
@@ -142,6 +153,11 @@ export function decodeSnapshot(buf: ArrayBuffer, tagOrder: readonly string[]): W
     });
   }
 
+  const supplyByProv =
+    supplyLen > 0
+      ? new Uint8Array(buf.slice(SUPPLY_SECTION_OFFSET, SUPPLY_SECTION_OFFSET + supplyLen))
+      : undefined;
+
   return {
     tick,
     speed,
@@ -152,5 +168,6 @@ export function decodeSnapshot(buf: ArrayBuffer, tagOrder: readonly string[]): W
     stateHash,
     seqNo,
     nations,
+    ...(supplyByProv ? { supplyByProv } : {}),
   };
 }

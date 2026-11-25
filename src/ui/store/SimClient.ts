@@ -12,6 +12,7 @@ import type { ArmySystemSnapshot } from '../../sim/systems/armyTypes';
 import type { CombatSystemSnapshot } from '../../sim/systems/combatTypes';
 import type { GovernanceLawId, GovernanceSlot, GovernanceSnapshot } from '../../sim/systems/governanceTypes';
 import type { BuildingType, EquipmentType, IndustrySnapshot } from '../../sim/systems/industryTypes';
+import type { LogisticsSnapshot } from '../../sim/systems/supplyTypes';
 import type { TechSnapshot } from '../../sim/systems/techTypes';
 import type { MainToWorkerMessage, WorkerToMainMessage } from '../../sim/workerProtocol';
 
@@ -24,6 +25,7 @@ export interface SimClientHandlers {
     tech?: TechSnapshot,
     army?: ArmySystemSnapshot,
     combat?: CombatSystemSnapshot,
+    logistics?: LogisticsSnapshot,
   ) => void;
 }
 
@@ -61,7 +63,16 @@ export class SimClient {
         const ret: MainToWorkerMessage = { type: 'RETURN_BUFFER', buffer: msg.buffer };
         this.worker.postMessage(ret, [msg.buffer]);
 
-        handlers.onSnapshot(snap, msg.dispatches, msg.industry, msg.governance, msg.tech, msg.army, msg.combat);
+        handlers.onSnapshot(
+          snap,
+          msg.dispatches,
+          msg.industry,
+          msg.governance,
+          msg.tech,
+          msg.army,
+          msg.combat,
+          msg.logistics,
+        );
 
         if (this.snapshotWaiters.length > 0) {
           const waiters = this.snapshotWaiters.splice(0);
@@ -204,6 +215,10 @@ export class SimClient {
 
   assignCommander(armyId: number, commanderId: string | null): void {
     this.sendCommand('ASSIGN_COMMANDER', { armyId, commanderId });
+  }
+
+  toggleArmyMotorizedSupply(armyId: number, enabled?: boolean): void {
+    this.sendCommand('TOGGLE_ARMY_MOTORIZED_SUPPLY', { armyId, enabled });
   }
 
   stepOnce(): void {

@@ -4,11 +4,13 @@
  * Pure TypeScript — zero DOM/PIXI dependencies.
  */
 import { clampInt } from '../core/FixedMath';
+import type { SeededRng } from '../core/SeededRng';
 import { COMBAT_DEFINES } from '../data/combatDefines';
 import { getCommanderDef } from '../data/commanders1936';
 import { getSimProvince } from '../data/provinces1936';
 import type { ControllerResolver } from './armyOrderSystem';
 import type { ArmyState, BrigadeState } from './armyTypes';
+import { getAiArmorOffensiveWeightPermille } from './weatherSystem';
 
 /** Update entrenchment (+3%/day stationary), planning (+3%/day on arrow front, -2%/day fighting), and Org recovery. */
 export function updateBrigadeReadinessTick(
@@ -35,8 +37,8 @@ export function updateBrigadeReadinessTick(
       continue;
     }
 
-    // Idle Org recovery (+10%/day -> +25 permille/tick)
-    if (b.orgPermille < 1000) {
+    // Idle Org recovery (+10%/day -> +25 permille/tick), halted under low supply / starvation (§4.10)
+    if (b.orgPermille < 1000 && b.supplyStatus === 'ok') {
       b.orgPermille = Math.min(1000, b.orgPermille + COMBAT_DEFINES.idleOrgRecoveryPerTickPermille);
     }
 
@@ -65,6 +67,8 @@ export interface ArrowStepHooks {
   getController: ControllerResolver;
   areAtWar: (a: string, b: string) => boolean;
   onInitiateAttack: (brigade: BrigadeState, targetProvId: number) => void;
+  tick?: number;
+  rng?: SeededRng;
 }
 
 /**
@@ -131,6 +135,14 @@ export function executeOffensiveArrowsTick(
       const bestDist = Math.hypot(bestProv.cx - goalProv.cx, bestProv.cy - goalProv.cy);
       // Attack if advancing toward goal (or directly adjacent to goal, or within gentle flank arc)
       if (bestTarget === arrow.targetProvId || bestDist <= curDist + 55 || waypointSet.has(bestTarget)) {
+        // Under East/Nordic mud or severe winter, AI reduces armored/motorized offensive weight (x0.4)
+        if ((b.template === 'ARM' || b.template === 'MOT') && hooks.tick !== undefined) {
+          const wt = getAiArmorOffensiveWeightPermille(bestTarget, hooks.tick);
+          if (wt < 1000) {
+            const roll = hooks.rng ? hooks.rng.nextPermille() : ((b.id * 131 + hooks.tick * 97) % 1000);
+            if (roll >= wt) continue;
+          }
+        }
         onInitiateAttack(b, bestTarget);
       }
     }

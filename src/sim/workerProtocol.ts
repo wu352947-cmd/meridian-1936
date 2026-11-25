@@ -8,6 +8,7 @@ import type { ArmySystemSnapshot } from './systems/armyTypes';
 import type { CombatSystemSnapshot } from './systems/combatTypes';
 import type { GovernanceSnapshot } from './systems/governanceTypes';
 import type { IndustrySnapshot } from './systems/industryTypes';
+import type { LogisticsSnapshot } from './systems/supplyTypes';
 import type { TechSnapshot } from './systems/techTypes';
 
 export type MainToWorkerMessage =
@@ -27,4 +28,5 @@ export type WorkerToMainMessage =
       tech?: TechSnapshot;
       army?: ArmySystemSnapshot;
       combat?: CombatSystemSnapshot;
+      logistics?: LogisticsSnapshot;
     };
