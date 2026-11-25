@@ -8,7 +8,7 @@ export type TerrainType =
   | 'desert'
   | 'sea';
 
-export type MapMode = 'political' | 'terrain' | 'diplomacy' | 'industry';
+export type MapMode = 'political' | 'terrain' | 'supply' | 'diplomacy' | 'industry' | 'air_sea';
 
 export type FactionId = 'allies' | 'axis' | 'comintern' | 'neutral';
 

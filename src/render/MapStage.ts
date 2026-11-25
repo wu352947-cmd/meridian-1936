@@ -24,8 +24,10 @@ export interface MapStageCallbacks {
 const MODE_NUM: Record<MapMode, number> = {
   political: 0,
   terrain: 1,
-  diplomacy: 2,
-  industry: 3,
+  supply: 2,
+  diplomacy: 3,
+  industry: 4,
+  air_sea: 5,
 };
 
 export class MapStage {
@@ -249,6 +251,24 @@ export class MapStage {
 
   getProvinceById(id: number): ProvinceRecord | null {
     return this.provById.get(id) ?? null;
+  }
+
+  /** Highlight a country's border & capital on the map without breaking map interaction. */
+  highlightCountry(tag: string | null, panToCapital = false, targetZoom?: number): void {
+    if (!tag) {
+      this.selectProvince(null);
+      return;
+    }
+    const provs = this.meta.provinces.filter((p) => !p.isSea && p.owner === tag);
+    if (provs.length === 0) return;
+    const cap = provs.find((p) => p.isCapital) ?? provs.reduce((a, b) => (b.vp > a.vp ? b : a), provs[0]!);
+    this.selectedProvId = null;
+    this.selectedOwner = tag;
+    this.borders.setSelection(tag, null);
+    this.refreshLuts();
+    if (panToCapital) {
+      this.setCamera(cap.cx, cap.cy, targetZoom ?? Math.max(this.zoom, 1.05));
+    }
   }
 
   renderNow(): void {

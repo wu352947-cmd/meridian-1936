@@ -1,12 +1,13 @@
 # 《子午线 1936：碎裂大陆》（Meridian 1936）
 
-基于 **Vite + TypeScript (strict) + PixiJS v8 + Preact (@preact/signals)** 构建的 1936 欧洲历史大战略参谋地图工程（当前交付 **Batch 01：工程底座、1936 欧洲离线地图编译器与可交互参谋地图**）。
+基于 **Vite + TypeScript (strict) + PixiJS v8 + Preact (`@preact/signals`) + Web Worker** 构建的 1936 欧洲历史大战略网页工程（当前已完成 **Batch 01 交互参谋地图** 与 **Batch 02 确定性 Worker 时钟、三锚点桌面 HUD 及选国档案袋**）。
 
-## 视觉与技术特点（Batch 01）
-- **原创“1936 参谋部亚麻制图”画风**：暖亚麻纸底纹、灰青石板海盆与近岸等深水纹、低饱和矿物国家色、钢笔粗墨国界 + 淡墨虚线省界、国界内侧水彩晕染、欧洲主要大河与 10° LAEA 经纬网。
-- **1936 年历史版图离线编译**：由公有领域 Natural Earth 1:10m/1:50m 数据经 LAEA 欧洲等积方位投影（10°E, 52°N）重构 **676 个陆地省 + 62 个海域分区**（基于 Natural Earth admin-1 + 河流 + 水密共享边分形抖动自然省界），精确还原但泽自由市、波兰走廊、东普鲁士飞地、德国萨尔兰与西里西亚、捷克斯洛伐克与苏台德/外喀尔巴阡、独立奥地利、芬苏卡累利阿旧界、波兰克雷西与维尔诺、立陶宛梅梅尔与考纳斯、大罗马尼亚（含比萨拉比亚与南多布罗加）、意大利南蒂罗尔与伊斯特拉、独立阿尔巴尼亚、爱尔兰自由邦、冰岛与土耳其欧洲部分。
-- **GPU LUT 片元着色 + O(1) 像素拾取**：`province_id.png`（4096×3072 无损、NEAREST、无预乘 Alpha）配合 `4096×1` 查表纹理实现 4 种地图模式秒切（政治版图 / 地形地貌 / 外交阵营 / 工业资源），支持 4 级语义缩放 LOD、沿国土主脊贝塞尔弯曲排布的中文国名与屏幕空间防重叠标注。
-- **合规中立设计**：全套国家旗帜为原创纯几何 SVG（德国黑白红+中心直臂铁十字 Balkenkreuz，意大利三色+萨伏依蓝盾无束棒，苏联简化金星红旗，日本日之丸）；严禁违禁符号；全部开放素材详见 [CREDITS.md](CREDITS.md) 及应用内“关于 / 致谢”面板。
+## 核心特性
+- **1936 欧洲参谋部亚麻制图（Batch 01）**：由公有领域 Natural Earth 经 LAEA 欧洲等积投影编译 **676 陆地省 + 62 海区**，GPU LUT 片元着色器 + 4 级语义缩放 LOD + 沿国土主脊贝塞尔弯曲国名 + O(1) 像素拾取。
+- **确定性 Web Worker 时钟与双缓冲通信（Batch 02）**：`src/sim/` 纯 TS 零 DOM 依赖，采用千分比定点数 `FixedMath`、`sfc32` 确定性 PRNG、6 小时 Tick 日历（每日 4 跳：晨/午/昏/夜）与 `32 KB × 2` 双缓冲 `Transferable ArrayBuffer` 乒乓快照（不依赖 `SharedArrayBuffer`，原生兼容 GitHub Pages）。
+- **《1936 欧洲参谋部国情档案袋》选国流程（Batch 02）**：8 大推荐国卡槽 + 31 国名录 + 背景地图点选全部 31 个 1936 欧洲主权国家开局；原创中性合规 SVG 国旗、首都地标版画剪影与五维综合国力简条（零领袖肖像、零违禁符号）。
+- **原创“三锚点参谋桌面”HUD（Batch 02）**：顶栏双翼分体简报笺（中央留白、JetBrains Mono `tabular-nums` 等宽对齐、半圆欧洲危机度表盘与电报流水纸带）、底部居中胡桃木坞站（`F1–F6` 卷宗夹签 + `M1–M6` 地图模式透镜）与单一右侧 380px 占位抽屉；全覆盖层指针穿透不阻挡地图缩放拖拽。
+- **开源合规与字体子集**：霞鹜文楷屏幕阅读版、思源黑体、JetBrains Mono、Cinzel（均为 SIL OFL 1.1）按字符集子集化为 WOFF2；全部资产登记于 [CREDITS.md](CREDITS.md) 与 `public/assets/ASSET_LICENSES.json`。
 
 ## 快速运行
 
@@ -22,21 +23,21 @@ npm run build
 npx vite preview --port 4173
 # 访问 http://localhost:4173/meridian-1936/
 
-# 运行拓扑、1936 边界与合规单元测试
+# 运行确定性回放、拓扑与合规单元测试
 npm test
 ```
 
-## 离线重新编译地图（可选，产物已随仓库提交）
-仓库已包含编译产物 `public/data/europe_1936/`，构建与运行完全不依赖网络。如需从 Natural Earth 重新编译：
-```bash
-npm run build:map
-```
-
-## 快捷键与调试 URL 参数
-- 地图模式：`Q` 政治 / `W` 地形 / `E` 外交 / `R` 工业（或 `1`–`4`）
-- 视口控制：鼠标左键拖拽平移、滚轮缩放、`+`/`-` 缩放、`H` 重置全欧视角、`Esc` 清除选中或关闭弹窗
-- 调试参数：`?autotest=1&mapmode=political|terrain|diplomacy|industry&cam=x,y,zoom&selectProv=<id>&hoverProv=<id>&lang=zh`
-- 无头截图（SwiftShader）：
+## 快捷键与调试 URL 协议
+- **时间控制（主界面）**：`Space` 暂停 / 继续，`1` / `2` / `3` / `4` 切换 `1×–4×` 倍速
+- **参谋卷宗（主界面）**：`F1` 方略 / `F2` 外交 / `F3` 军工 / `F4` 科技 / `F5` 占领补给 / `F6` 集团军
+- **地图模式透镜（主界面）**：`Q` 政治（M1） / `W` 地形（M2） / `E` 补给（M3） / `R` 外交（M4） / `T` 工业（M5） / `Y` 海空（M6）
+- **视口操作**：左键拖拽平移、滚轮缩放、`+` / `-` 缩放、`H` / `Home` 聚焦首都或重置全图、`Esc` 逐层关闭弹窗/抽屉/选省
+- **确定性调试 URL**：
+  - 选国档案袋：`?autotest=1&screen=country_select&country=GER`
+  - 直入主界面设定国家与日期：`?autotest=1&scenario=1936&country=FRA&date=1936-03-15`
+  - 展开指定抽屉与暂停：`?autotest=1&scenario=1936&country=GER&date=1936-01-01&paused=1&panel=industry`
+  - 地图与视角调试：`?autotest=1&mapmode=political|terrain|supply|diplomacy|industry|air_sea&cam=x,y,zoom&selectProv=<id>&hoverProv=<id>`
+- **无头截图（SwiftShader 1440×900）**：
   ```bash
-  node tools/shot.mjs --url "http://localhost:4173/meridian-1936/?autotest=1" --out shots/capture.png --w 1440 --h 900 --wait 400
+  node tools/shot.mjs --url "http://localhost:4173/meridian-1936/?autotest=1&scenario=1936&country=FRA&date=1936-03-15" --out shots/hud_fra_19360315.png --w 1440 --h 900 --wait 450
   ```

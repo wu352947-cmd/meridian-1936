@@ -79,6 +79,11 @@ const FLAG_MAP: Record<string, string> = {
     `<circle cx="8.7" cy="4.2" r="1.4" fill="#E0B445"/>`,
   ),
   SPR: h3('#B8292F', '#E5B53A', '#63326E'),
+  SPA: wrap(
+    `<rect width="30" height="5" fill="#B8292F"/>` +
+    `<rect y="5" width="30" height="10" fill="#E5B53A"/>` +
+    `<rect y="15" width="30" height="5" fill="#B8292F"/>`,
+  ),
   CZE: wrap(
     `<rect width="30" height="10" fill="#F2EFE9"/>` +
     `<rect y="10" width="30" height="10" fill="#C42B3B"/>` +

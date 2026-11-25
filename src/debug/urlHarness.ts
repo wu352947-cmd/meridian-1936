@@ -1,7 +1,19 @@
+import type { SimSpeed } from '../sim/core/ClockCalendar';
 import type { MapMode } from '../types/map';
+
+export type ScreenMode = 'country_select' | 'game';
+export type DrawerTab = 'directives' | 'diplomacy' | 'industry' | 'tech' | 'logistics' | 'army';
 
 export interface UrlHarnessParams {
   autotest: boolean;
+  screen: ScreenMode;
+  scenario: '1936';
+  country: string;
+  date: string | null;
+  seed: number;
+  paused: boolean | null;
+  speed: SimSpeed | null;
+  panel: DrawerTab | null;
   mapmode: MapMode;
   cam: { x: number; y: number; zoom: number } | null;
   selectProv: number | null;
@@ -10,7 +22,23 @@ export interface UrlHarnessParams {
   about: boolean;
 }
 
-const VALID_MODES = new Set<MapMode>(['political', 'terrain', 'diplomacy', 'industry']);
+const VALID_MODES = new Set<MapMode>([
+  'political',
+  'terrain',
+  'supply',
+  'diplomacy',
+  'industry',
+  'air_sea',
+]);
+
+const VALID_PANELS = new Set<DrawerTab>([
+  'directives',
+  'diplomacy',
+  'industry',
+  'tech',
+  'logistics',
+  'army',
+]);
 
 export function parseUrlHarness(search: string = window.location.search): UrlHarnessParams {
   const sp = new URLSearchParams(search);
@@ -18,6 +46,50 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
 
   const rawMode = sp.get('mapmode') as MapMode | null;
   const mapmode: MapMode = rawMode && VALID_MODES.has(rawMode) ? rawMode : 'political';
+
+  const rawPanel = sp.get('panel') as DrawerTab | null;
+  const panel: DrawerTab | null = rawPanel && VALID_PANELS.has(rawPanel) ? rawPanel : null;
+
+  const rawCountry = (sp.get('country') ?? '').trim().toUpperCase();
+  const country = /^[A-Z]{3}$/.test(rawCountry) ? rawCountry : 'GER';
+
+  const rawDate = sp.get('date');
+  const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate.trim()) ? rawDate.trim() : null;
+
+  const rawSeed = sp.get('seed');
+  const parsedSeed = rawSeed ? Number.parseInt(rawSeed, 10) : NaN;
+  const seed = Number.isFinite(parsedSeed) && parsedSeed > 0 ? parsedSeed : 19360101;
+
+  const rawSpeed = sp.get('speed');
+  const parsedSpeed = rawSpeed !== null ? Number.parseInt(rawSpeed, 10) : NaN;
+  const speed: SimSpeed | null =
+    Number.isFinite(parsedSpeed) && parsedSpeed >= 0 && parsedSpeed <= 4
+      ? (parsedSpeed as SimSpeed)
+      : null;
+
+  const rawPaused = sp.get('paused');
+  const paused: boolean | null =
+    rawPaused === '1' || rawPaused === 'true'
+      ? true
+      : rawPaused === '0' || rawPaused === 'false'
+        ? false
+        : null;
+
+  // Screen resolution: explicit ?screen= wins; else ?scenario=/?country=/?date=/?panel= enters game directly;
+  // default webpage landing opens country_select.
+  const rawScreen = sp.get('screen');
+  let screen: ScreenMode = 'country_select';
+  if (rawScreen === 'country_select') {
+    screen = 'country_select';
+  } else if (
+    rawScreen === 'game' ||
+    sp.has('scenario') ||
+    sp.has('country') ||
+    sp.has('date') ||
+    panel !== null
+  ) {
+    screen = 'game';
+  }
 
   let cam: { x: number; y: number; zoom: number } | null = null;
   const rawCam = sp.get('cam');
@@ -36,6 +108,14 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
 
   return {
     autotest,
+    screen,
+    scenario: '1936',
+    country,
+    date,
+    seed,
+    paused,
+    speed,
+    panel,
     mapmode,
     cam,
     selectProv: parseIntOrNull(sp.get('selectProv')),
@@ -53,7 +133,14 @@ declare global {
       selectProvince: (id: number | null) => void;
       hoverProvince: (id: number | null) => void;
       setMapMode: (mode: MapMode) => void;
-      getStats: () => { landCount: number; seaCount: number; zoom: number };
+      getStats: () => {
+        landCount: number;
+        seaCount: number;
+        zoom: number;
+        tick: number;
+        playerTag: string;
+        screen: ScreenMode;
+      };
     };
   }
 }

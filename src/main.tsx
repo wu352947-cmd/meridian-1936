@@ -1,13 +1,18 @@
 import './styles/tokens.css';
 import './ui/styles/overlay.css';
+import './ui/styles/dossier.css';
+import './ui/styles/dossierTray.css';
+import './ui/styles/hudTop.css';
+import './ui/styles/hudDock.css';
 
 import { render } from 'preact';
 import { loadMeridianFonts } from './assets/loadFonts';
 import { parseUrlHarness } from './debug/urlHarness';
 import { loadEurope1936Map } from './render/loadMapData';
 import { MapStage } from './render/MapStage';
+import { isPlayableTag } from './sim/data/nations1936';
 import type { MapMode } from './types/map';
-import { MapOverlay } from './ui/MapOverlay';
+import { AppShell } from './ui/AppShell';
 import {
   cameraSig,
   hoveredProvSig,
@@ -17,14 +22,33 @@ import {
   mapReadySig,
   selectedProvSig,
   showCreditsSig,
-  type MapActions,
 } from './ui/mapStore';
+import { SimClient } from './ui/store/SimClient';
+import {
+  activeDrawerSig,
+  applyWorldSnapshot,
+  autotestModeSig,
+  screenModeSig,
+  selectedCountrySig,
+  simPlayerTagSig,
+  simSeedSig,
+  simTickSig,
+  type AppActions,
+} from './ui/store/simStore';
 
 async function bootstrap(): Promise<void> {
   const harness = parseUrlHarness();
+  const initialTag = isPlayableTag(harness.country) ? harness.country : 'GER';
   let stage: MapStage | null = null;
+  let sim: SimClient | null = null;
 
-  const actions: MapActions = {
+  autotestModeSig.value = harness.autotest;
+  screenModeSig.value = harness.screen;
+  selectedCountrySig.value = initialTag;
+  simSeedSig.value = harness.seed;
+  activeDrawerSig.value = harness.panel;
+
+  const actions: AppActions = {
     setMode: (mode: MapMode) => {
       mapModeSig.value = mode;
       stage?.setMapMode(mode);
@@ -33,15 +57,69 @@ async function bootstrap(): Promise<void> {
     zoomOut: () => stage?.zoomBy(1 / 1.32),
     resetView: () => stage?.fitOverviewCamera(),
     clearSelection: () => stage?.selectProvince(null),
+    focusCountry: (tag: string, pan = false) => {
+      stage?.highlightCountry(tag, pan, 1.35);
+    },
+    previewCountry: (tag: string, pan = false) => {
+      if (!isPlayableTag(tag)) return;
+      selectedCountrySig.value = tag;
+      stage?.highlightCountry(tag, pan, 1.05);
+    },
+    startCampaign: (tag: string) => {
+      const validTag = isPlayableTag(tag) ? tag : 'GER';
+      selectedCountrySig.value = validTag;
+      screenModeSig.value = 'game';
+      activeDrawerSig.value = null;
+      stage?.selectProvince(null);
+      stage?.highlightCountry(validTag, false);
+      sim?.selectCountry(validTag);
+      sim?.togglePause(true);
+    },
+    openCountrySelect: () => {
+      sim?.togglePause(true);
+      activeDrawerSig.value = null;
+      selectedCountrySig.value = simPlayerTagSig.value;
+      screenModeSig.value = 'country_select';
+      stage?.highlightCountry(simPlayerTagSig.value, false);
+    },
+    setSpeed: (speed) => {
+      sim?.setSpeed(speed);
+    },
+    togglePause: (paused) => {
+      sim?.togglePause(paused);
+    },
+    toggleDrawer: (tab) => {
+      activeDrawerSig.value = tab;
+    },
   };
 
   const uiRoot = document.getElementById('ui-root');
   if (uiRoot) {
-    render(<MapOverlay actions={actions} />, uiRoot);
+    render(<AppShell actions={actions} />, uiRoot);
   }
 
   try {
-    const [, bundle] = await Promise.all([loadMeridianFonts(), loadEurope1936Map()]);
+    sim = new SimClient({
+      onSnapshot: (snap, dispatches) => applyWorldSnapshot(snap, dispatches),
+    });
+
+    const initialPaused =
+      harness.paused !== null ? harness.paused : harness.autotest || harness.screen === 'country_select';
+    const initialSpeed = harness.speed ?? 2;
+
+    const [, bundle] = await Promise.all([
+      loadMeridianFonts(),
+      loadEurope1936Map(),
+      sim.initScenario({
+        scenarioId: harness.scenario,
+        countryTag: initialTag,
+        seed: harness.seed,
+        startDate: harness.date ?? undefined,
+        paused: initialPaused,
+        speed: initialSpeed,
+      }),
+    ]);
+
     mapCountsSig.value = { land: bundle.meta.landCount, sea: bundle.meta.seaCount };
 
     const mapRoot = document.getElementById('map-root');
@@ -52,6 +130,12 @@ async function bootstrap(): Promise<void> {
         hoveredProvSig.value = p;
       },
       onSelectProvince: (p) => {
+        if (screenModeSig.value === 'country_select') {
+          if (p && !p.isSea && isPlayableTag(p.owner)) {
+            actions.previewCountry(p.owner, false);
+          }
+          return;
+        }
         selectedProvSig.value = p;
       },
       onCameraChange: (cam) => {
@@ -59,11 +143,15 @@ async function bootstrap(): Promise<void> {
       },
     });
 
-    // Apply URL debug harness parameters deterministically
     actions.setMode(harness.mapmode);
     if (harness.cam) {
       stage.setCamera(harness.cam.x, harness.cam.y, harness.cam.zoom);
+    } else if (harness.screen === 'country_select') {
+      // Frame continental Europe cleanly beside the right dossier folder
+      stage.setCamera(1880, 1615, 0.50);
+      stage.highlightCountry(initialTag, false);
     }
+
     if (harness.selectProv !== null) {
       stage.selectProvince(harness.selectProv);
     }
@@ -74,7 +162,6 @@ async function bootstrap(): Promise<void> {
       showCreditsSig.value = true;
     }
 
-    // Expose deterministic debug handle for screenshot/verification scripts
     const liveStage = stage;
     window.__MERIDIAN_DEBUG__ = {
       setCamera: (x, y, zoom) => liveStage.setCamera(x, y, zoom),
@@ -85,6 +172,9 @@ async function bootstrap(): Promise<void> {
         landCount: bundle.meta.landCount,
         seaCount: bundle.meta.seaCount,
         zoom: liveStage.getCamera().zoom,
+        tick: simTickSig.value,
+        playerTag: simPlayerTagSig.value,
+        screen: screenModeSig.value,
       }),
     };
 

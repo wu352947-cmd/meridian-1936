@@ -28,6 +28,22 @@ function industryColor(ind: number, vp: number): [number, number, number] {
   return [158, 76, 58];
 }
 
+/** Placeholder supply preview choropleth (Batch 02 visual preview; real BFS supply arrives in Batch 07). */
+function supplyPreviewColor(p: ProvinceRecord): [number, number, number] {
+  if (p.isCapital || p.vp >= 15 || p.industry >= 8) return [78, 138, 87];
+  if (p.isCoastal || p.terrain === 'plains' || p.terrain === 'urban') return [134, 168, 102];
+  if (p.terrain === 'forest' || p.terrain === 'hills') return [196, 172, 104];
+  if (p.terrain === 'desert' || p.terrain === 'marsh') return [194, 128, 78];
+  return [176, 86, 68]; // mountain bottleneck
+}
+
+/** Placeholder air/sea strategic theater preview (Batch 02 preview; full air/navy in Batch 10). */
+function airSeaPreviewColor(p: ProvinceRecord): [number, number, number] {
+  if (p.isCapital || p.vp >= 12) return [84, 124, 166];
+  if (p.isCoastal) return [114, 146, 170];
+  return [168, 164, 154];
+}
+
 /** Diplomacy lens color relative to selected country (or faction blocs if none selected). */
 function diplomacyColor(
   p: ProvinceRecord,
@@ -111,8 +127,12 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
         const t = TERRAIN_INFO[p.terrain];
         rgb = hexToRgb(t?.color ?? '#E5DEC9');
       }
+    } else if (mode === 'supply') {
+      rgb = supplyPreviewColor(p);
     } else if (mode === 'diplomacy') {
       rgb = diplomacyColor(p, selectedOwner);
+    } else if (mode === 'air_sea') {
+      rgb = airSeaPreviewColor(p);
     } else {
       rgb = industryColor(p.industry, p.vp);
     }
