@@ -213,7 +213,7 @@ async function bootstrap(): Promise<void> {
     const army = simArmySig.value;
     if (!army || !stage) return;
     stage.setPlayerTag(simPlayerTagSig.value);
-    stage.updateArmyOverlay(army.armies, army.brigades, selectedBrigadeIdsSig.value, selectedArmyIdSig.value);
+    stage.updateArmyOverlay(army.armies, army.brigades, selectedBrigadeIdsSig.value, selectedArmyIdSig.value, simCombatSig.value);
   };
 
   try {

@@ -88,6 +88,11 @@ export class CurvedLabelLayer {
   private readonly countryItems: CountryLabelItem[] = [];
   private readonly cityItems: CityLabelItem[] = [];
   private readonly provLabels: Array<{ prov: ProvinceRecord; label: Text; w: number; h: number }> = [];
+  private lastPlacedBoxes: Array<[number, number, number, number]> = [];
+
+  getPlacedScreenBoxes(): ReadonlyArray<[number, number, number, number]> {
+    return this.lastPlacedBoxes;
+  }
 
   constructor(meta: EuropeMapMeta) {
     this.root.addChild(this.countryGroup, this.cityMarkerGroup, this.cityLabelGroup, this.provLabelGroup);
@@ -475,5 +480,6 @@ export class CurvedLabelLayer {
         }
       }
     }
+    this.lastPlacedBoxes = placed;
   }
 }

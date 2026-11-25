@@ -19,6 +19,7 @@ import { UnitCounterLayer, type CounterHitItem } from './UnitCounterLayer';
 import { buildOwnerIndexMap, fillProvinceLuts } from './lutPalette';
 import { createProvinceLutShader } from './shaders/provinceLut';
 import type { ArmySnap, BrigadeSnap } from '../sim/systems/armyTypes';
+import type { CombatSystemSnapshot } from '../sim/systems/combatTypes';
 import type { RegionDynamicSnap } from '../sim/systems/industryTypes';
 import type { OrderToolMode } from '../ui/store/simStore';
 
@@ -54,8 +55,10 @@ export class MapStage {
 
   private readonly primaryBuf = new Uint8Array(4096 * 4);
   private readonly secondaryBuf = new Uint8Array(4096 * 4);
+  private readonly occupierBuf = new Uint8Array(4096 * 4);
   private readonly primaryLutSrc: BufferImageSource;
   private readonly secondaryLutSrc: BufferImageSource;
+  private readonly occupierLutSrc: BufferImageSource;
   private readonly lutShader: Shader;
   private readonly terrainDetails: TerrainDetailLayer;
   private readonly borders: BorderMeshBuilder;
@@ -74,6 +77,7 @@ export class MapStage {
   private selectedOwner: string | null = null;
   private hoveredProvId: number | null = null;
   private regionsById = new Map<number, RegionDynamicSnap>();
+  private controllerByProv = new Map<number, string>();
 
   // Camera state: world point centered in viewport + zoom scale
   private camX = 1880;
@@ -143,11 +147,23 @@ export class MapStage {
       addressMode: 'clamp-to-edge',
     });
 
+    this.occupierLutSrc = new BufferImageSource({
+      resource: this.occupierBuf,
+      width: 4096,
+      height: 1,
+      format: 'rgba8unorm',
+      scaleMode: 'nearest',
+      alphaMode: 'no-premultiply-alpha',
+      autoGenerateMipmaps: false,
+      addressMode: 'clamp-to-edge',
+    });
+
     this.lutShader = createProvinceLutShader(
       provIdSrc,
       reliefSrc,
       this.primaryLutSrc,
       this.secondaryLutSrc,
+      this.occupierLutSrc,
       this.meta.width,
       this.meta.height,
     );
@@ -240,7 +256,6 @@ export class MapStage {
     this.lutShader.resources.mapUniforms.uniforms.uZoom = this.zoom;
     this.terrainDetails.updateLod(this.zoom);
     this.borders.updateLod(this.zoom);
-    this.frontlines.updateLod(this.zoom);
     const view = {
       minX: this.camX - halfW,
       minY: this.camY - halfH,
@@ -250,6 +265,11 @@ export class MapStage {
       vh,
     };
     this.labels.updateLod(this.zoom, view);
+    this.frontlines.updateLod(
+      this.zoom,
+      { zoom: this.zoom, minX: view.minX, minY: view.minY, vw, vh },
+      this.labels.getPlacedScreenBoxes(),
+    );
     this.industryOverlay.updateLod(this.zoom, view);
     this.counters.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
     this.cbs.onCameraChange({ x: this.camX, y: this.camY, zoom: this.zoom });
@@ -306,8 +326,13 @@ export class MapStage {
     brigades: BrigadeSnap[],
     selectedBrigadeIds: readonly number[],
     selectedArmyId: number | null,
+    combat?: CombatSystemSnapshot | null,
   ): void {
-    this.frontlines.setData(armies, brigades, selectedArmyId);
+    if (combat) {
+      this.controllerByProv = new Map(combat.occupiedProvinces.map((o) => [o.provId, o.controller]));
+      this.refreshLuts();
+    }
+    this.frontlines.setData(armies, brigades, selectedArmyId, this.controllerByProv);
     this.counters.setData(armies, brigades, selectedBrigadeIds, selectedArmyId);
   }
 
@@ -369,11 +394,14 @@ export class MapStage {
       selectedOwner: this.selectedOwner,
       hoveredProvId: this.hoveredProvId,
       regionsById: this.regionsById,
+      controllerByProv: this.controllerByProv,
       primaryBuf: this.primaryBuf,
       secondaryBuf: this.secondaryBuf,
+      occupierBuf: this.occupierBuf,
     });
     this.primaryLutSrc.update();
     this.secondaryLutSrc.update();
+    this.occupierLutSrc.update();
   }
 
   /** O(1) pixel-perfect province picking via 2x downsampled Uint16Array grid. */

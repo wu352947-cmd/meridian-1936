@@ -96,19 +96,26 @@ export interface LutUpdateOptions {
   selectedOwner: string | null;
   hoveredProvId: number | null;
   regionsById?: ReadonlyMap<number, RegionDynamicSnap>;
+  controllerByProv?: ReadonlyMap<number, string>;
   primaryBuf: Uint8Array;
   secondaryBuf: Uint8Array;
+  occupierBuf?: Uint8Array;
 }
 
 /**
- * Fill the 4096x1 RGBA primary and secondary LUT buffers in O(N) (<0.1ms).
+ * Fill the 4096x1 RGBA primary, secondary, and occupier LUT buffers in O(N) (<0.1ms).
  * primary:   RGB = fill color, A = fill strength hint (255 = land, 0 = sea)
- * secondary: R = ownerIndex (0..255), G = bit7(128)=selectedCountry | bit6(64)=constructing, B = selectedProv, A = hoveredProv
+ * secondary: R = effectiveControllerIndex (0..255), G = bit7=selectedCountry | bit6=constructing, B = selectedProv, A = hoveredProv
+ * occupier:  RGB = occupier color when militarily occupied (controller !== coreOwner), A = 255 occupied / 0 normal
  */
 export function fillProvinceLuts(opts: LutUpdateOptions): void {
-  const { provinces, ownerIdx, mode, selectedProvId, selectedOwner, hoveredProvId, regionsById, primaryBuf, secondaryBuf } = opts;
+  const {
+    provinces, ownerIdx, mode, selectedProvId, selectedOwner, hoveredProvId,
+    regionsById, controllerByProv, primaryBuf, secondaryBuf, occupierBuf,
+  } = opts;
   primaryBuf.fill(0);
   secondaryBuf.fill(0);
+  occupierBuf?.fill(0);
 
   for (const p of provinces) {
     const off = p.id * 4;
@@ -154,11 +161,20 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
     primaryBuf[off + 2] = rgb[2];
     primaryBuf[off + 3] = 255;
 
-    const selFlag = selectedOwner && p.owner === selectedOwner ? 128 : 0;
+    const ctrl = controllerByProv?.get(p.id) ?? p.owner;
+    const selFlag = selectedOwner && ctrl === selectedOwner ? 128 : 0;
     const buildFlag = regDyn && regDyn.activeBuilding ? 64 : 0;
-    secondaryBuf[off] = ownerIdx.get(p.owner) ?? 254;
+    secondaryBuf[off] = ownerIdx.get(ctrl) ?? 254;
     secondaryBuf[off + 1] = selFlag | buildFlag;
     secondaryBuf[off + 2] = p.id === selectedProvId ? 255 : 0;
     secondaryBuf[off + 3] = p.id === hoveredProvId ? 255 : 0;
+
+    if (occupierBuf && ctrl !== p.owner) {
+      const occRgb = hexToRgb(COUNTRIES_1936[ctrl]?.color ?? '#8C6239');
+      occupierBuf[off] = occRgb[0];
+      occupierBuf[off + 1] = occRgb[1];
+      occupierBuf[off + 2] = occRgb[2];
+      occupierBuf[off + 3] = 255;
+    }
   }
 }

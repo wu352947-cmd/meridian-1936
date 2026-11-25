@@ -12,7 +12,7 @@ export interface StitchedChain {
   friendlySign: number;
 }
 
-const ENDPOINT_EPS = 4.0;
+const ENDPOINT_EPS = 6.5;
 
 function dist2(a: Pt, b: Pt): number {
   const dx = a[0] - b[0];
@@ -20,29 +20,8 @@ function dist2(a: Pt, b: Pt): number {
   return dx * dx + dy * dy;
 }
 
-/** Stitch topology arcs sharing endpoints into continuous ordered polylines. */
-export function stitchFrontlineArcs(
-  arcs: readonly DecodedArc[],
-  ownerTag: string,
-  targetTag: string,
-  friendlyProvSet: ReadonlySet<number>,
-  sampleOwner: (wx: number, wy: number) => string | null,
-): StitchedChain[] {
-  const segs: Pt[][] = [];
-  for (const arc of arcs) {
-    if (!arc.hasLand || arc.hasSea || arc.points.length < 2) continue;
-    if (!arc.owners.has(ownerTag) || !arc.owners.has(targetTag)) continue;
-    let matchFriendly = false;
-    for (const pid of arc.provIds) {
-      if (friendlyProvSet.has(pid)) {
-        matchFriendly = true;
-        break;
-      }
-    }
-    if (!matchFriendly) continue;
-    segs.push(arc.points.map((p) => [p[0], p[1]] as Pt));
-  }
-
+/** Stitch raw point segments sharing endpoints into continuous smooth polylines. */
+export function stitchSegmentsToPolylines(segs: readonly Pt[][], smooth = true): Pt[][] {
   const used = new Array<boolean>(segs.length).fill(false);
   const chains: Pt[][] = [];
   const eps2 = ENDPOINT_EPS * ENDPOINT_EPS;
@@ -89,13 +68,94 @@ export function stitchFrontlineArcs(
         }
       }
     }
-    chains.push(smoothPolyline(chain));
+    if (chain.length >= 2) chains.push(smooth ? smoothPolyline(chain) : chain);
+  }
+  return chains;
+}
+
+/** Extract outer boundary polylines around a set of provinces (used for target hatching & pocket rings). */
+export function extractRegionBoundaryPolylines(
+  arcs: readonly DecodedArc[],
+  provSet: ReadonlySet<number>,
+  smooth = false,
+): Pt[][] {
+  const segs: Pt[][] = [];
+  for (const arc of arcs) {
+    if (arc.points.length < 2) continue;
+    let hasIn = false;
+    let hasOut = false;
+    for (const pid of arc.provIds) {
+      if (provSet.has(pid)) hasIn = true;
+      else hasOut = true;
+    }
+    if (hasIn && (hasOut || arc.hasSea || arc.provIds.size === 1)) {
+      segs.push(arc.points.map((p) => [p[0], p[1]] as Pt));
+    }
+  }
+  return stitchSegmentsToPolylines(segs, smooth);
+}
+
+/** Stitch topology arcs along the LIVE contact boundary between ownerTag and targetTag. */
+export function stitchFrontlineArcs(
+  arcs: readonly DecodedArc[],
+  ownerTag: string,
+  targetTag: string,
+  friendlyProvSet: ReadonlySet<number>,
+  sampleController: (wx: number, wy: number) => string | null,
+  getProvController?: (provId: number) => string | null,
+): StitchedChain[] {
+  const segs: Pt[][] = [];
+  for (const arc of arcs) {
+    if (!arc.hasLand || arc.hasSea || arc.points.length < 2) continue;
+    let hasOwner = false;
+    let hasTarget = false;
+    let matchFriendly = friendlyProvSet.size === 0;
+    for (const pid of arc.provIds) {
+      const ctrl = getProvController ? getProvController(pid) : null;
+      if (ctrl === ownerTag) {
+        hasOwner = true;
+        if (friendlyProvSet.has(pid)) matchFriendly = true;
+      } else if (ctrl === targetTag) {
+        hasTarget = true;
+      }
+    }
+    if (!getProvController) {
+      if (!arc.owners.has(ownerTag) || !arc.owners.has(targetTag)) continue;
+      for (const pid of arc.provIds) {
+        if (friendlyProvSet.has(pid)) {
+          matchFriendly = true;
+          break;
+        }
+      }
+    } else if (!hasOwner || !hasTarget) {
+      continue;
+    }
+    if (!matchFriendly) continue;
+    segs.push(arc.points.map((p) => [p[0], p[1]] as Pt));
   }
 
+  const chains = stitchSegmentsToPolylines(segs, true);
   return chains.map((points) => ({
     points,
-    friendlySign: detectFriendlyNormalSign(points, ownerTag, sampleOwner),
+    friendlySign: detectFriendlyNormalSign(points, ownerTag, sampleController),
   }));
+}
+
+/** Find nearest sample point on a frontline to snap an offensive arrow tail cleanly. */
+export function snapPointToFrontline(target: Pt, samples: readonly OffsetSample[]): Pt | null {
+  if (samples.length === 0) return null;
+  let best = samples[0]!;
+  let bestD2 = Infinity;
+  for (const sm of samples) {
+    const dx = sm.x - target[0];
+    const dy = sm.y - target[1];
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestD2) {
+      bestD2 = d2;
+      best = sm;
+    }
+  }
+  return [best.x, best.y];
 }
 
 /** Gentle 2-pass smoothing preserving endpoints to eliminate micro-sawtooth vertex noise. */

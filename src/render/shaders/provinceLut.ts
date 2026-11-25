@@ -28,6 +28,7 @@ uniform sampler2D uProvIdTex;
 uniform sampler2D uReliefTex;
 uniform sampler2D uPrimaryLut;
 uniform sampler2D uSecondaryLut;
+uniform sampler2D uOccupierLut;
 
 uniform vec2 uMapSize;
 uniform float uZoom;
@@ -75,6 +76,7 @@ void main() {
 
   vec4 prim = texture2D(uPrimaryLut, vec2(lutU, 0.5));
   vec4 sec = texture2D(uSecondaryLut, vec2(lutU, 0.5));
+  vec4 occ = texture2D(uOccupierLut, vec2(lutU, 0.5));
   vec3 relief = texture2D(uReliefTex, vUV).rgb;
 
   bool isSea = prim.a < 0.5;
@@ -215,6 +217,15 @@ void main() {
     col = mix(col, clamp(lifted, 0.0, 1.0), 0.85);
   }
 
+  // Active military occupation dual-color diagonal stripes in screen pixel space (zero Moire at all zooms)
+  if (occ.a > 0.5 && uMode < 0.5) {
+    float occStripe = step(mod(gl_FragCoord.x + gl_FragCoord.y, 10.0), 4.0);
+    vec3 occTint = clamp(mix(vec3(dot(occ.rgb, vec3(0.299, 0.587, 0.114))), occ.rgb, 1.18), 0.0, 1.0);
+    vec3 occMul = reliefBase * mix(vec3(1.0), occTint * 1.24, 0.72);
+    vec3 occCol = mix(mix(reliefBase, occTint, 0.62), occMul, 0.52);
+    col = mix(col, occCol, occStripe * 0.84);
+  }
+
   // Active construction ochre-gold diagonal hatching across the region
   if (isConstructing) {
     float stripe = step(mod(gl_FragCoord.x + gl_FragCoord.y, 11.0), 3.6);
@@ -248,6 +259,7 @@ export function createProvinceLutShader(
   reliefSource: TextureSource,
   primaryLutSource: BufferImageSource,
   secondaryLutSource: BufferImageSource,
+  occupierLutSource: BufferImageSource,
   mapWidth: number,
   mapHeight: number,
 ): Shader {
@@ -261,6 +273,7 @@ export function createProvinceLutShader(
       uReliefTex: reliefSource,
       uPrimaryLut: primaryLutSource,
       uSecondaryLut: secondaryLutSource,
+      uOccupierLut: occupierLutSource,
       mapUniforms: {
         uMapSize: { value: [mapWidth, mapHeight], type: 'vec2<f32>' },
         uZoom: { value: 1.0, type: 'f32' },
