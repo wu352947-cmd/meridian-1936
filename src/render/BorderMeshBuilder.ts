@@ -79,7 +79,10 @@ export class BorderMeshBuilder {
   readonly root = new Container();
   private readonly graticuleG = new Graphics();
   private readonly seaBorderG = new Graphics();
+  private readonly provBorderHaloG = new Graphics();
+  private readonly provBorderGuideG = new Graphics();
   private readonly provBorderG = new Graphics();
+  private readonly riverHaloG = new Graphics();
   private readonly riverMajorG = new Graphics();
   private readonly riverMinorG = new Graphics();
   private readonly coastG = new Graphics();
@@ -103,8 +106,11 @@ export class BorderMeshBuilder {
     this.root.addChild(
       this.graticuleG,
       this.seaBorderG,
+      this.riverHaloG,
       this.riverMinorG,
       this.riverMajorG,
+      this.provBorderHaloG,
+      this.provBorderGuideG,
       this.provBorderG,
       this.coastG,
       this.intlBorderG,
@@ -222,14 +228,19 @@ export class BorderMeshBuilder {
 
   private drawStaticVectors(meta: EuropeMapMeta): void {
     for (const gl of meta.graticule) drawPolyline(this.graticuleG, gl.points);
-    this.graticuleG.stroke({ width: 0.9, color: 0x8ea6b8, alpha: 0.14 });
+    this.graticuleG.stroke({ width: 0.85, color: 0x7f95a6, alpha: 0.9 });
 
     for (const r of meta.rivers) {
-      if (r.rank <= 1) drawPolyline(this.riverMajorG, r.points);
-      else drawPolyline(this.riverMinorG, r.points);
+      if (r.rank <= 1) {
+        drawPolyline(this.riverHaloG, r.points);
+        drawPolyline(this.riverMajorG, r.points);
+      } else {
+        drawPolyline(this.riverMinorG, r.points);
+      }
     }
-    this.riverMajorG.stroke({ width: 1.55, color: 0x3b5c76, alpha: 0.88, cap: 'round', join: 'round' });
-    this.riverMinorG.stroke({ width: 0.95, color: 0x456984, alpha: 0.62, cap: 'round', join: 'round' });
+    this.riverHaloG.stroke({ width: 2.55, color: 0xd8e0e2, alpha: 0.22, cap: 'round', join: 'round' });
+    this.riverMajorG.stroke({ width: 1.68, color: 0x2f5370, alpha: 0.92, cap: 'round', join: 'round' });
+    this.riverMinorG.stroke({ width: 1.05, color: 0x3b6380, alpha: 0.82, cap: 'round', join: 'round' });
 
     for (const arc of this.decodedArcs) {
       if (arc.points.length < 2) continue;
@@ -239,7 +250,9 @@ export class BorderMeshBuilder {
         if (arc.owners.size > 1) {
           drawPolyline(this.intlBorderG, arc.points);
         } else if (arc.provIds.size > 1) {
-          drawDashedPolyline(this.provBorderG, arc.points, 5.0, 3.8);
+          drawDashedPolyline(this.provBorderHaloG, arc.points, 6.0, 2.4);
+          drawPolyline(this.provBorderGuideG, arc.points);
+          drawDashedPolyline(this.provBorderG, arc.points, 5.8, 2.4);
         }
       } else if (arc.hasSea && arc.provIds.size > 1) {
         drawDashedPolyline(this.seaBorderG, arc.points, 8.0, 9.0);
@@ -247,9 +260,11 @@ export class BorderMeshBuilder {
     }
 
     this.seaBorderG.stroke({ width: 0.8, color: 0x6c8ca3, alpha: 0.20 });
-    this.provBorderG.stroke({ width: 0.68, color: 0x4f463d, alpha: 0.68 });
-    this.coastG.stroke({ width: 1.35, color: 0x2c2621, alpha: 0.92, join: 'round', cap: 'round' });
-    this.intlBorderG.stroke({ width: 1.95, color: 0x1e1a17, alpha: 0.96, join: 'round', cap: 'round' });
+    this.provBorderHaloG.stroke({ width: 1.50, color: 0xf0e7d6, alpha: 0.23, cap: 'round' });
+    this.provBorderGuideG.stroke({ width: 0.44, color: 0x322a22, alpha: 0.29, join: 'round', cap: 'round' });
+    this.provBorderG.stroke({ width: 0.90, color: 0x261f19, alpha: 0.90, cap: 'round' });
+    this.coastG.stroke({ width: 1.38, color: 0x2a241f, alpha: 0.93, join: 'round', cap: 'round' });
+    this.intlBorderG.stroke({ width: 2.05, color: 0x1c1815, alpha: 0.97, join: 'round', cap: 'round' });
   }
 
   /** Draw vermilion outer glow on selected province + understated thin frontier line on its country. */
@@ -299,15 +314,24 @@ export class BorderMeshBuilder {
   }
 
   updateLod(zoom: number): void {
-    if (zoom < 1.05) {
-      this.provBorderG.alpha = 0;
-    } else if (zoom < 2.1) {
-      this.provBorderG.alpha = 0.26 + ((zoom - 1.05) / 1.05) * 0.28;
-    } else {
-      this.provBorderG.alpha = Math.min(0.72, 0.54 + (zoom - 2.1) * 0.1);
+    let provAlpha = 0;
+    if (zoom >= 0.90 && zoom < 1.55) {
+      provAlpha = ((zoom - 0.90) / 0.65) * 0.64;
+    } else if (zoom >= 1.55 && zoom < 2.60) {
+      provAlpha = 0.64 + ((zoom - 1.55) / 1.05) * 0.24;
+    } else if (zoom >= 2.60) {
+      provAlpha = Math.min(0.96, 0.88 + (zoom - 2.60) * 0.06);
     }
-    this.riverMajorG.alpha = zoom < 0.85 ? 0.36 : Math.min(0.92, 0.56 + (zoom - 0.85) * 0.44);
-    this.riverMinorG.alpha = zoom < 1.35 ? 0 : Math.min(0.7, (zoom - 1.35) * 0.52);
+
+    this.provBorderG.alpha = provAlpha;
+    this.provBorderGuideG.alpha = provAlpha * 0.90;
+    this.provBorderHaloG.alpha = provAlpha * 0.92;
+
+    const majorRiverAlpha = zoom < 0.85 ? 0.40 : Math.min(0.96, 0.58 + (zoom - 0.85) * 0.42);
+    this.riverMajorG.alpha = majorRiverAlpha;
+    this.riverHaloG.alpha = zoom < 1.05 ? 0 : Math.min(0.92, (zoom - 1.05) * 0.65);
+    this.riverMinorG.alpha = zoom < 1.0 ? 0 : Math.min(0.92, 0.22 + (zoom - 1.0) * 0.54);
+    this.graticuleG.alpha = zoom < 1.1 ? 0.14 : Math.min(0.24, 0.14 + (zoom - 1.1) * 0.06);
     this.seaBorderG.alpha = zoom < 1.0 ? 0.14 : 0.24;
   }
 }

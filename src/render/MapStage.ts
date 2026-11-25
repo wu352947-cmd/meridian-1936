@@ -11,6 +11,7 @@ import type { EuropeMapMeta, MapMode, ProvinceRecord } from '../types/map';
 import type { LoadedMapBundle } from './loadMapData';
 import { BorderMeshBuilder } from './BorderMeshBuilder';
 import { CurvedLabelLayer } from './CurvedLabelLayer';
+import { TerrainDetailLayer } from './TerrainDetailLayer';
 import { buildOwnerIndexMap, fillProvinceLuts } from './lutPalette';
 import { createProvinceLutShader } from './shaders/provinceLut';
 
@@ -42,6 +43,7 @@ export class MapStage {
   private readonly primaryLutSrc: BufferImageSource;
   private readonly secondaryLutSrc: BufferImageSource;
   private readonly lutShader: Shader;
+  private readonly terrainDetails: TerrainDetailLayer;
   private readonly borders: BorderMeshBuilder;
   private readonly labels: CurvedLabelLayer;
   private readonly cbs: MapStageCallbacks;
@@ -133,10 +135,11 @@ export class MapStage {
     });
 
     const mapMesh = new Mesh({ geometry, shader: this.lutShader });
+    this.terrainDetails = new TerrainDetailLayer(this.meta, this.pickGrid, this.pickW, this.pickH);
     this.borders = new BorderMeshBuilder(this.meta, bundle.topology, this.pickGrid, this.pickW, this.pickH);
     this.labels = new CurvedLabelLayer(this.meta);
 
-    this.world.addChild(mapMesh, this.borders.root, this.labels.root);
+    this.world.addChild(mapMesh, this.terrainDetails.root, this.borders.root, this.labels.root);
     this.app.stage.addChild(this.world);
 
     this.refreshLuts();
@@ -189,6 +192,7 @@ export class MapStage {
     );
 
     this.lutShader.resources.mapUniforms.uniforms.uZoom = this.zoom;
+    this.terrainDetails.updateLod(this.zoom);
     this.borders.updateLod(this.zoom);
     this.labels.updateLod(this.zoom, {
       minX: this.camX - halfW,

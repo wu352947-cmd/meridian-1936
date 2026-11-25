@@ -50,6 +50,23 @@ float sampleProvId(vec2 uv) {
   return decodeId(texture2D(uProvIdTex, clamp(uv, 0.0, 1.0)));
 }
 
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
 void main() {
   vec4 idRaw = texture2D(uProvIdTex, vUV);
   float provId = decodeId(idRaw);
@@ -130,29 +147,60 @@ void main() {
   float edgeWide = clamp(diffOuter / 4.5, 0.0, 1.0);
   float borderBand = clamp(edgeNear * 0.72 + edgeWide * 0.42, 0.0, 1.0);
 
-  // Watercolor fill alpha: crisp mineral pigment near international border (0.82), luminous interior (0.42)
-  float baseAlpha = mix(0.42, 0.82, borderBand);
-  vec3 reliefBase = relief;
+  // Watercolor fill alpha: crisp mineral pigment near international border, luminous interior letting relief breathe
+  float baseAlpha = mix(0.36, 0.78, borderBand);
+  vec3 reliefBase = clamp((relief - 0.52) * 1.32 + 0.54, 0.0, 1.0);
+  float hillStrength = 0.42;
+  float multiplyMix = 0.56;
 
   if (uMode > 0.5 && uMode < 1.5) {
     // Terrain mode: heightened Alps/Carpathian hillshade relief + organic topographic wash
-    reliefBase = clamp((relief - 0.5) * 1.48 + 0.52, 0.0, 1.0);
-    baseAlpha = mix(0.44, 0.58, borderBand);
+    reliefBase = clamp((relief - 0.50) * 1.56 + 0.53, 0.0, 1.0);
+    baseAlpha = mix(0.42, 0.56, borderBand);
+    hillStrength = 0.28;
+    multiplyMix = 0.52;
   } else if (uMode >= 1.5) {
-    // Diplomacy & industry modes: crisp thematic choropleth clarity
-    baseAlpha = mix(0.50, 0.80, borderBand);
+    // Diplomacy & industry modes: crisp thematic choropleth clarity while preserving relief depth
+    reliefBase = clamp((relief - 0.52) * 1.24 + 0.54, 0.0, 1.0);
+    baseAlpha = mix(0.46, 0.78, borderBand);
+    hillStrength = 0.30;
+    multiplyMix = 0.50;
   }
 
   // Gentle mineral chroma lift + paper multiply blend so relief mountain shadows breathe cleanly
   vec3 pigment = prim.rgb;
   float luma = dot(pigment, vec3(0.299, 0.587, 0.114));
-  vec3 vividPigment = clamp(mix(vec3(luma), pigment, 1.14), 0.0, 1.0);
-  vec3 multiplied = reliefBase * mix(vec3(1.0), vividPigment * 1.18, baseAlpha);
-  vec3 alphaMixed = mix(reliefBase, vividPigment, baseAlpha * 0.84);
-  vec3 col = mix(alphaMixed, multiplied, 0.40);
+  vec3 vividPigment = clamp(mix(vec3(luma), pigment, 1.15), 0.0, 1.0);
+  vec3 multiplied = reliefBase * mix(vec3(1.0), vividPigment * 1.24, baseAlpha);
+  vec3 alphaMixed = mix(reliefBase, vividPigment, baseAlpha * 0.82);
+  vec3 col = mix(alphaMixed, multiplied, multiplyMix);
+
+  // Sculptural hillshade relief accent so mountains & rolling hills remain legible in political mode
+  float relLuma = dot(relief, vec3(0.299, 0.587, 0.114));
+  float hillAccent = clamp((relLuma - 0.69) * hillStrength, -0.15, 0.13);
+  col *= (1.0 + hillAccent);
+
+  // Zoom-aware tactile fine linen weave + watercolor paper mottling (prevents blurry upscaled flat plains)
+  vec2 mapPos = vUV * uMapSize;
+  float mottle = (vnoise(mapPos * 0.016) * 0.62 + vnoise(mapPos * 0.048) * 0.38) - 0.5;
+  float linenVis = smoothstep(0.95, 2.20, uZoom);
+  float fineVis = smoothstep(1.50, 2.95, uZoom);
+  float warp = sin(mapPos.x * 3.65 + mottle * 1.8);
+  float weft = sin(mapPos.y * 3.65 - mottle * 1.8);
+  float weaveCross = (warp + weft) * 0.25;
+  float tooth = vnoise(mapPos * 0.72) - 0.5;
+  float microGrain = vnoise(mapPos * 2.10) - 0.5;
+  float paperTex = mottle * 0.068 + (weaveCross * 0.018 + tooth * 0.038) * linenVis + microGrain * 0.024 * fineVis;
+  col += vec3(1.04, 1.00, 0.92) * paperTex;
+
+  // Whisper-subtle per-province hand-tinted wash variation when zoomed in (separates adjacent plains gently)
+  float provJitter = fract(sin(provId * 127.1 + 311.7) * 43758.5453) - 0.5;
+  float jitterAmt = mix(0.012, 0.046, smoothstep(0.95, 2.25, uZoom));
+  if (uMode > 0.5 && uMode < 1.5) jitterAmt *= 0.55;
+  col *= (1.0 + provJitter * jitterAmt);
 
   // Subtle ink darkening right along the inner international frontier
-  col *= (1.0 - edgeNear * 0.07);
+  col *= (1.0 - edgeNear * 0.075);
 
   // Selected country: ultra-subtle warm presence (NO heavy red wash on other provinces!)
   if (isSelCountry && !isSelProv) {

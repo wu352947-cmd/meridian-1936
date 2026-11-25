@@ -70,7 +70,9 @@ interface CityLabelItem {
   prov: ProvinceRecord;
   marker: Graphics;
   label: Text;
-  minZoom: number;
+  markerMinZoom: number;
+  labelMinZoom: number;
+  tier: 1 | 2 | 3;
   priority: number;
   baseWidth: number;
   baseHeight: number;
@@ -185,9 +187,14 @@ export class CurvedLabelLayer {
         if (p.isCapital) {
           this.drawStar(marker, p.cx, p.cy, 5, 5.2, 2.3);
           marker.fill({ color: 0xe8c468 }).stroke({ width: 1.15, color: 0x1e1a17 });
+        } else if (p.vp >= 14) {
+          marker.circle(p.cx, p.cy, 3.25);
+          marker.fill({ color: 0xf4efe6 }).stroke({ width: 1.15, color: 0x1e1a17 });
+          marker.circle(p.cx, p.cy, 1.05);
+          marker.fill({ color: 0x26201a });
         } else {
-          marker.circle(p.cx, p.cy, p.vp >= 14 ? 3.2 : 2.5);
-          marker.fill({ color: 0xf4efe6 }).stroke({ width: 1.1, color: 0x1e1a17 });
+          marker.circle(p.cx, p.cy, 2.5);
+          marker.fill({ color: 0xf2ece1 }).stroke({ width: 1.05, color: 0x221d18 });
         }
         this.cityMarkerGroup.addChild(marker);
 
@@ -196,15 +203,41 @@ export class CurvedLabelLayer {
         label.anchor.set(0.5, 0.5);
         this.cityLabelGroup.addChild(label);
 
-        const minZoom = p.isCapital && p.vp >= 15 ? 0.92 : p.isCapital ? 1.15 : p.vp >= 14 ? 1.45 : 2.0;
+        const markerMinZoom = p.isCapital && p.vp >= 15 ? 0.88 : p.isCapital ? 1.08 : p.vp >= 14 ? 1.16 : 1.44;
+        const labelMinZoom = p.isCapital && p.vp >= 15 ? 0.90 : p.isCapital ? 1.12 : p.vp >= 14 ? 1.22 : 1.52;
         this.cityItems.push({
           prov: p,
           marker,
           label,
-          minZoom,
-          priority: (p.isCapital ? 120 : 0) + p.vp,
+          markerMinZoom,
+          labelMinZoom,
+          tier: p.isCapital ? 1 : 2,
+          priority: (p.isCapital ? 120 : 20) + p.vp,
           baseWidth: textStr.length * 13 + 10,
           baseHeight: 17,
+        });
+      } else if (p.cityZh && !p.hideMapLabel) {
+        // Tier 3 secondary historical town: refined small engraved dot + existing city name at tactical zoom
+        const marker = new Graphics();
+        marker.circle(p.cx, p.cy, 1.85);
+        marker.fill({ color: 0xebe2d0 }).stroke({ width: 0.95, color: 0x28211b });
+        this.cityMarkerGroup.addChild(marker);
+
+        const textStr = p.cityZh;
+        const label = new Text({ text: textStr, style: provStyle });
+        label.anchor.set(0.5, 0.5);
+        this.cityLabelGroup.addChild(label);
+
+        this.cityItems.push({
+          prov: p,
+          marker,
+          label,
+          markerMinZoom: 1.62,
+          labelMinZoom: 2.15,
+          tier: 3,
+          priority: p.vp,
+          baseWidth: textStr.length * 11 + 8,
+          baseHeight: 15,
         });
       } else if (!p.hideMapLabel) {
         const label = new Text({ text: p.nameZh, style: provStyle });
@@ -354,12 +387,13 @@ export class CurvedLabelLayer {
       }
     }
 
-    // 2. City markers & smart 4-offset collision-free labels
+    // 2. City & town markers + smart 4-offset collision-free labels
     const markerScale = Math.max(0.32, Math.min(1.1, invScale * 0.95));
     const labelScale = Math.max(0.28, Math.min(1.1, invScale * 0.96));
+    const placedDots: Array<[number, number]> = [];
 
     for (const item of this.cityItems) {
-      if (zoom < item.minZoom) {
+      if (zoom < item.markerMinZoom) {
         item.marker.visible = false;
         item.label.visible = false;
         continue;
@@ -373,44 +407,54 @@ export class CurvedLabelLayer {
         continue;
       }
 
+      const dotClear =
+        item.tier === 1 || !placedDots.some(([dx, dy]) => Math.hypot(cx - dx, cy - dy) < (item.tier === 2 ? 11 : 16));
+      const dotInSafe = inViewportSafe(cx - 8, cy - 8, cx + 8, cy + 8, 6);
+
+      const yOff = item.tier === 3 ? 11 : 14;
+      const xOff = item.baseWidth * 0.5 + (item.tier === 3 ? 6 : 8);
       const offsets: Array<[number, number]> = [
-        [0, 14],
-        [0, -14],
-        [item.baseWidth * 0.5 + 8, 0],
-        [-(item.baseWidth * 0.5 + 8), 0],
+        [0, yOff],
+        [0, -yOff],
+        [xOff, 0],
+        [-xOff, 0],
       ];
 
       let placedPos: [number, number] | null = null;
-      for (const [ox, oy] of offsets) {
-        if (tryPlace(cx + ox, cy + oy, item.baseWidth, item.baseHeight)) {
-          placedPos = [ox, oy];
-          break;
+      if (zoom >= item.labelMinZoom) {
+        for (const [ox, oy] of offsets) {
+          if (tryPlace(cx + ox, cy + oy, item.baseWidth, item.baseHeight)) {
+            placedPos = [ox, oy];
+            break;
+          }
         }
       }
 
-      if (placedPos) {
+      const showMarker = dotInSafe && (placedPos !== null || (dotClear && (item.tier <= 2 || zoom >= 1.75)));
+      if (showMarker) {
+        placedDots.push([cx, cy]);
         item.marker.visible = true;
         item.marker.position.set(
           item.prov.cx * (1 - markerScale),
           item.prov.cy * (1 - markerScale),
         );
         item.marker.scale.set(markerScale);
+        item.marker.alpha =
+          item.tier === 3 ? Math.min(0.86, 0.45 + (zoom - item.markerMinZoom) * 0.55) : 0.96;
+      } else {
+        item.marker.visible = false;
+      }
 
+      if (placedPos && showMarker) {
         item.label.visible = true;
         item.label.scale.set(labelScale);
         item.label.position.set(
           item.prov.cx + placedPos[0] / zoom,
           item.prov.cy + placedPos[1] / zoom,
         );
+        item.label.alpha =
+          item.tier === 3 ? Math.min(0.88, 0.48 + (zoom - item.labelMinZoom) * 0.65) : 0.96;
       } else {
-        item.marker.visible = Boolean(item.prov.isCapital) && inViewportSafe(cx - 8, cy - 8, cx + 8, cy + 8, 6);
-        if (item.marker.visible) {
-          item.marker.position.set(
-            item.prov.cx * (1 - markerScale),
-            item.prov.cy * (1 - markerScale),
-          );
-          item.marker.scale.set(markerScale);
-        }
         item.label.visible = false;
       }
     }
