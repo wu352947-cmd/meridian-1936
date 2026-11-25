@@ -91,10 +91,12 @@ export class SupplyOverlayLayer {
       const minZoom = isCap
         ? 0.42
         : isCore
-          ? (isOwn ? 0.55 : 0.85)
+          ? (isOwn ? 0.52 : 0.82)
           : h.portLevel >= 4
-            ? (isOwn ? 0.65 : 0.95)
-            : (isOwn ? 0.92 : 1.35);
+            ? (isOwn ? 0.65 : 0.98)
+            : h.portLevel >= 3
+              ? (isOwn ? 0.95 : 1.35)
+              : 1.55;
 
       this.nodes.push({
         provId: h.provId,

@@ -166,7 +166,13 @@ void main() {
     baseAlpha = mix(0.42, 0.56, borderBand);
     hillStrength = 0.28;
     multiplyMix = 0.52;
-  } else if (uMode >= 1.5) {
+  } else if (uMode > 1.5 && uMode < 2.5) {
+    // M3 Supply lens: rich cartographic choropleth separation (emerald -> amber -> rust) while keeping relief legible
+    reliefBase = clamp((relief - 0.50) * 1.18 + 0.56, 0.0, 1.0);
+    baseAlpha = mix(0.66, 0.84, borderBand);
+    hillStrength = 0.24;
+    multiplyMix = 0.42;
+  } else if (uMode >= 2.5) {
     // Diplomacy & industry modes: crisp thematic choropleth clarity while preserving relief depth
     reliefBase = clamp((relief - 0.52) * 1.24 + 0.54, 0.0, 1.0);
     baseAlpha = mix(0.46, 0.78, borderBand);

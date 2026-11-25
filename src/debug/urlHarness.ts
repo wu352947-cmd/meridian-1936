@@ -44,6 +44,7 @@ export interface UrlHarnessParams {
   mapmode: MapMode;
   cam: { x: number; y: number; zoom: number } | null;
   selectProv: number | null;
+  selectBattle: number | null;
   hoverProv: number | null;
   lang: 'zh' | 'en';
   about: boolean;
@@ -249,6 +250,7 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     mapmode,
     cam,
     selectProv: parseIntOrNull(sp.get('selectProv')),
+    selectBattle: parseIntOrNull(sp.get('selectBattle')),
     hoverProv: parseIntOrNull(sp.get('hoverProv')),
     lang: sp.get('lang') === 'en' ? 'en' : 'zh',
     about: sp.get('modal') === 'credits' || sp.get('about') === '1',

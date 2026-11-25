@@ -58,15 +58,15 @@ function lerpRgb(
 function supplyLiveColor(supplyVal: number, colorblind: boolean): [number, number, number] {
   const s = Math.max(0, Math.min(100, supplyVal));
   if (colorblind) {
-    if (s === 0) return [36, 40, 48];
-    if (s < 40) return lerpRgb([204, 86, 12], [228, 152, 34], s / 39);
-    if (s < 80) return lerpRgb([154, 158, 162], [72, 134, 182], (s - 40) / 39);
-    return lerpRgb([42, 118, 174], [14, 92, 156], (s - 80) / 20);
+    if (s === 0) return [30, 38, 50];
+    if (s < 40) return lerpRgb([202, 74, 10], [234, 148, 28], s / 39);
+    if (s < 80) return lerpRgb([204, 194, 174], [148, 166, 180], (s - 40) / 39);
+    return lerpRgb([58, 134, 190], [16, 94, 158], (s - 80) / 20);
   }
-  if (s === 0) return [52, 22, 22];
-  if (s < 40) return lerpRgb([158, 52, 42], [202, 114, 52], s / 39);
-  if (s < 80) return lerpRgb([206, 154, 62], [116, 166, 86], (s - 40) / 39);
-  return lerpRgb([86, 152, 86], [52, 126, 74], (s - 80) / 20);
+  if (s === 0) return [52, 20, 20];
+  if (s < 40) return lerpRgb([154, 42, 34], [206, 98, 46], s / 39);
+  if (s < 80) return lerpRgb([214, 136, 48], [210, 186, 86], (s - 40) / 39);
+  return lerpRgb([106, 168, 92], [44, 128, 72], (s - 80) / 20);
 }
 
 /** Placeholder air/sea strategic theater preview (Batch 02 preview; full air/navy in Batch 10). */

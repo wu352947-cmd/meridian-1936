@@ -11,9 +11,17 @@
 
 .season-corner {
   position: fixed;
-  width: 170px;
-  height: 170px;
+  width: 260px;
+  height: 220px;
   pointer-events: none;
+}
+
+.seasonal-frame-overlay.is-winter {
+  box-shadow: inset 0 0 42px rgba(174, 214, 240, 0.24);
+}
+
+.seasonal-frame-overlay.is-mud {
+  box-shadow: inset 0 0 38px rgba(96, 70, 42, 0.24);
 }
 
 .season-corner.is-tl { top: 0; left: 0; }

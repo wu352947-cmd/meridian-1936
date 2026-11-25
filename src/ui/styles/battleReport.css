@@ -3,10 +3,10 @@
 .br-wrap {
   flex: 1;
   overflow-y: auto;
-  padding: 7px 10px;
+  padding: 6px 9px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .br-empty {
@@ -44,7 +44,7 @@
   border: 1px solid var(--ui-border-brass);
   border-left: 4px solid #B83A2D;
   border-radius: 3px;
-  padding: 7px 9px;
+  padding: 5px 8px;
 }
 
 .br-title-row {
@@ -87,10 +87,10 @@
   background: #221E1A;
   border: 1px solid rgba(110, 93, 66, 0.45);
   border-radius: 4px;
-  padding: 6px 8px;
+  padding: 5px 7px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
 }
 
 .br-side-card.is-atk {
@@ -230,10 +230,10 @@
   background: #1C1916;
   border: 1px solid #756142;
   border-radius: 4px;
-  padding: 7px 8px;
+  padding: 6px 7px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .br-bd-head {
@@ -257,24 +257,32 @@
 .br-factor-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
+  gap: 3px;
 }
 
 .br-factor-pill {
   background: #27221D;
   border: 1px solid rgba(110, 93, 66, 0.35);
   border-radius: 3px;
-  padding: 3px 5px;
-  font-size: 9.5px;
+  padding: 2px 5px;
+  font-size: 9px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   color: var(--ui-text-secondary);
 }
 
+.br-factor-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 3px;
+}
+
 .br-factor-pill strong {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--ui-text-primary);
+  flex-shrink: 0;
 }
 
 .br-factor-lbl {
@@ -286,8 +294,11 @@
 .br-factor-note {
   font-family: var(--font-sans);
   font-size: 8.5px;
-  line-height: 1.25;
+  line-height: 1.2;
   color: #C4B7A4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .br-factor-pill.is-pos strong { color: #7ED48C; }

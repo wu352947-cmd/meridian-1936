@@ -416,7 +416,10 @@ async function bootstrap(): Promise<void> {
       }
     }
     if (harness.panel === 'battle' && simCombatSig.value && simCombatSig.value.battles.length > 0) {
-      selectedBattleProvIdSig.value = simCombatSig.value.battles[0]!.provinceId;
+      const requested = harness.selectBattle !== null
+        ? simCombatSig.value.battles.find((b) => b.provinceId === harness.selectBattle)
+        : undefined;
+      selectedBattleProvIdSig.value = (requested ?? simCombatSig.value.battles[0]!).provinceId;
     }
     syncArmyStage();
 

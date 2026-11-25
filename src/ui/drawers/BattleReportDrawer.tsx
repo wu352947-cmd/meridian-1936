@@ -112,6 +112,7 @@ export function BattleReportDrawer({ actions }: Props) {
   ];
   const inspected =
     allUnits.find((u) => u.brigadeId === pickedUnitId) ??
+    allUnits.find((u) => u.breakdown.factors.some((f) => f.key === 'supply' && f.enabled && f.multPermille < 1000)) ??
     battle.attackerFront.find((u) => u.breakdown.armorAdvantage) ??
     battle.attackerFront[0] ??
     battle.defenderFront[0] ??
@@ -223,8 +224,10 @@ export function BattleReportDrawer({ actions }: Props) {
                     : '';
               return (
                 <div key={f.key} class={`br-factor-pill ${cls}`} title={f.noteZh ?? f.labelZh}>
-                  <span class="br-factor-lbl">{f.labelZh}</span>
-                  <strong>{f.enabled ? fmtMult(f.multPermille) : '未启用'}</strong>
+                  <div class="br-factor-top">
+                    <span class="br-factor-lbl">{f.labelZh}</span>
+                    <strong>{f.enabled ? fmtMult(f.multPermille) : '未启用'}</strong>
+                  </div>
                   {f.enabled && f.noteZh && <span class="br-factor-note">{f.noteZh}</span>}
                 </div>
               );

@@ -8,28 +8,32 @@ import { simTickSig } from '../store/simStore';
 
 function WinterCornerSvg({ flipClass }: { flipClass: string }) {
   return (
-    <svg class={`season-corner ${flipClass}`} viewBox="0 0 180 180" width="180" height="180" aria-hidden="true">
+    <svg class={`season-corner ${flipClass}`} viewBox="0 0 260 220" width="260" height="220" aria-hidden="true">
       <defs>
         <radialGradient id="frostGlow" cx="0%" cy="0%" r="100%">
-          <stop offset="0%" stop-color="#D8EEFA" stop-opacity="0.46" />
-          <stop offset="48%" stop-color="#B7D9EE" stop-opacity="0.18" />
+          <stop offset="0%" stop-color="#E4F4FF" stop-opacity="0.62" />
+          <stop offset="45%" stop-color="#BEE0F5" stop-opacity="0.30" />
+          <stop offset="78%" stop-color="#A6CFE8" stop-opacity="0.09" />
           <stop offset="100%" stop-color="#9BC4DE" stop-opacity="0" />
         </radialGradient>
       </defs>
-      <rect x="0" y="0" width="180" height="180" fill="url(#frostGlow)" />
-      <g stroke="#E4F4FD" stroke-opacity="0.52" fill="none" stroke-linecap="round">
-        <path d="M 0 28 L 36 18 L 62 0" stroke-width="1.3" />
-        <path d="M 16 0 L 22 46 L 0 74" stroke-width="1.15" />
-        <path d="M 28 24 L 58 34 L 78 22" stroke-width="0.95" />
-        <path d="M 42 14 L 52 24 M 24 38 L 38 44 M 12 52 L 26 58" stroke-width="0.85" />
-        <path d="M 0 104 L 22 86 L 34 62" stroke-width="0.85" stroke-opacity="0.34" />
-        <path d="M 96 0 L 76 18 L 54 14" stroke-width="0.85" stroke-opacity="0.34" />
+      <rect x="0" y="0" width="260" height="220" fill="url(#frostGlow)" />
+      <g stroke="#EAF7FF" stroke-opacity="0.68" fill="none" stroke-linecap="round">
+        <path d="M 0 38 L 62 24 L 112 0" stroke-width="1.6" />
+        <path d="M 24 0 L 34 72 L 0 116" stroke-width="1.45" />
+        <path d="M 46 38 L 106 54 L 146 32" stroke-width="1.2" />
+        <path d="M 76 22 L 96 38 M 44 62 L 68 74 M 22 86 L 48 96" stroke-width="1.05" />
+        <path d="M 0 154 L 44 126 L 68 88 L 108 78" stroke-width="1.0" stroke-opacity="0.48" />
+        <path d="M 168 0 L 134 28 L 92 22" stroke-width="1.0" stroke-opacity="0.48" />
+        <path d="M 112 52 L 128 66 M 62 114 L 84 118 M 140 18 L 154 30" stroke-width="0.9" stroke-opacity="0.45" />
       </g>
-      <g fill="#EEF8FF" fill-opacity="0.42">
-        <circle cx="48" cy="24" r="1.5" />
-        <circle cx="24" cy="54" r="1.3" />
-        <circle cx="72" cy="14" r="1.2" />
-        <circle cx="14" cy="82" r="1.1" />
+      <g fill="#F2FAFF" fill-opacity="0.58">
+        <circle cx="88" cy="36" r="2.0" />
+        <circle cx="48" cy="84" r="1.8" />
+        <circle cx="132" cy="22" r="1.6" />
+        <circle cx="28" cy="130" r="1.6" />
+        <circle cx="104" cy="68" r="1.4" />
+        <circle cx="66" cy="112" r="1.4" />
       </g>
     </svg>
   );
@@ -37,24 +41,27 @@ function WinterCornerSvg({ flipClass }: { flipClass: string }) {
 
 function MudCornerSvg({ flipClass }: { flipClass: string }) {
   return (
-    <svg class={`season-corner ${flipClass}`} viewBox="0 0 180 180" width="180" height="180" aria-hidden="true">
+    <svg class={`season-corner ${flipClass}`} viewBox="0 0 260 220" width="260" height="220" aria-hidden="true">
       <defs>
         <radialGradient id="mudWash" cx="0%" cy="0%" r="100%">
-          <stop offset="0%" stop-color="#5B442A" stop-opacity="0.44" />
-          <stop offset="52%" stop-color="#765A39" stop-opacity="0.16" />
+          <stop offset="0%" stop-color="#4E381F" stop-opacity="0.60" />
+          <stop offset="48%" stop-color="#6B4F30" stop-opacity="0.28" />
+          <stop offset="80%" stop-color="#785B3A" stop-opacity="0.08" />
           <stop offset="100%" stop-color="#765A39" stop-opacity="0" />
         </radialGradient>
       </defs>
-      <rect x="0" y="0" width="180" height="180" fill="url(#mudWash)" />
-      <g fill="#4F3A22" fill-opacity="0.28">
-        <path d="M 0 0 L 82 0 C 66 18 44 26 30 42 C 18 56 14 78 0 92 Z" />
-        <ellipse cx="46" cy="28" rx="14" ry="5.5" transform="rotate(-24 46 28)" />
-        <ellipse cx="26" cy="60" rx="10" ry="4" transform="rotate(-58 26 60)" />
-        <circle cx="68" cy="18" r="3.2" />
-        <circle cx="82" cy="10" r="2.0" />
-        <circle cx="18" cy="84" r="2.8" />
-        <circle cx="38" cy="46" r="1.8" />
-        <circle cx="56" cy="36" r="1.5" />
+      <rect x="0" y="0" width="260" height="220" fill="url(#mudWash)" />
+      <g fill="#4A341C" fill-opacity="0.34">
+        <path d="M 0 0 L 132 0 C 106 28 74 40 48 68 C 28 90 22 122 0 144 Z" />
+        <ellipse cx="82" cy="46" rx="22" ry="7.5" transform="rotate(-24 82 46)" />
+        <ellipse cx="44" cy="96" rx="16" ry="6" transform="rotate(-56 44 96)" />
+        <ellipse cx="122" cy="24" rx="14" ry="4.5" transform="rotate(-14 122 24)" />
+        <circle cx="108" cy="36" r="4.2" />
+        <circle cx="144" cy="16" r="2.8" />
+        <circle cx="30" cy="134" r="3.6" />
+        <circle cx="64" cy="74" r="2.6" />
+        <circle cx="94" cy="60" r="2.2" />
+        <circle cx="48" cy="120" r="2.1" />
       </g>
     </svg>
   );
