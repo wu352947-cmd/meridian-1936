@@ -23,6 +23,7 @@ import {
   MIN_DEPLOY_STRENGTH_PERMILLE,
   refundTrainingOrder,
 } from '../src/sim/systems/trainingSystem';
+import { calcEdgeMarchTicksFixed, findLandPath } from '../src/sim/systems/pathfinding';
 
 describe('Batch 05 Land Brigades, Training, A* Marching, Frontlines & Orders', () => {
   it('1. validates 6 fixed brigade templates schema/stats and combat slot constants (4+2, 3+1, 5+2, flanking +2/+1)', () => {
@@ -174,5 +175,75 @@ describe('Batch 05 Land Brigades, Training, A* Marching, Frontlines & Orders', (
     const day35 = advanceTrainingOrdersDaily(queue, () => 0);
     expect(day35.completed.length).toBe(1);
     expect(day35.completed[0]!.id).toBe(ordInf.id);
+  });
+
+  it('3. computes optimal land A* travel time with terrain multipliers and forbids entering non-hostile foreign territory', () => {
+    const berlin = getCapitalProvince('GER')!;
+    const warsaw = getCapitalProvince('POL')!;
+    const breslau = getOwnerProvinces('GER').find((p) => p.nameZh === '布雷斯劳')!;
+    expect(breslau).toBeDefined();
+
+    // Friendly march Berlin -> Breslau succeeds; MOT (9.0) is strictly faster than INF (4.0)
+    const infPath = findLandPath({
+      startProvId: berlin.id,
+      goalProvId: breslau.id,
+      ownerTag: 'GER',
+      speedTenth: BRIGADE_TEMPLATES.INF.speedTenth,
+    });
+    const motPath = findLandPath({
+      startProvId: berlin.id,
+      goalProvId: breslau.id,
+      ownerTag: 'GER',
+      speedTenth: BRIGADE_TEMPLATES.MOT.speedTenth,
+    });
+    expect(infPath).not.toBeNull();
+    expect(motPath).not.toBeNull();
+    expect(infPath!.path[infPath!.path.length - 1]).toBe(breslau.id);
+    expect(motPath!.totalTicksFixed).toBeLessThan(infPath!.totalTicksFixed);
+    // Every province on a peacetime path must belong to GER
+    for (const pid of infPath!.path) {
+      expect(getSimProvince(pid)!.owner).toBe('GER');
+    }
+
+    // Terrain speed multiplier check: mountain (0.45) > 2x slower than plains (1.00) at equal distance
+    const fakeOrigin = { ...berlin, cx: 1000, cy: 1000 };
+    const fakePlains = { ...berlin, cx: 1060, cy: 1000, terrain: 'plains' as const };
+    const fakeForest = { ...berlin, cx: 1060, cy: 1000, terrain: 'forest' as const };
+    const fakeMountain = { ...berlin, cx: 1060, cy: 1000, terrain: 'mountain' as const };
+    const fakeMarsh = { ...berlin, cx: 1060, cy: 1000, terrain: 'marsh' as const };
+    const tPlains = calcEdgeMarchTicksFixed(fakeOrigin, fakePlains, 40);
+    const tForest = calcEdgeMarchTicksFixed(fakeOrigin, fakeForest, 40);
+    const tMarsh = calcEdgeMarchTicksFixed(fakeOrigin, fakeMarsh, 40);
+    const tMountain = calcEdgeMarchTicksFixed(fakeOrigin, fakeMountain, 40);
+    expect(tPlains).toBeLessThan(tForest);
+    expect(tForest).toBeLessThan(tMarsh);
+    expect(tMarsh).toBeLessThan(tMountain);
+    expect(tMountain).toBeGreaterThan(tPlains * 2);
+
+    // Non-hostile foreign territory (GER -> Warsaw without war) is strictly forbidden
+    const forbidden = findLandPath({
+      startProvId: berlin.id,
+      goalProvId: warsaw.id,
+      ownerTag: 'GER',
+      speedTenth: 40,
+    });
+    expect(forbidden).toBeNull();
+
+    // East Prussia (e.g. Allenstein) is unreachable by land from Berlin across neutral POL/DNZ!
+    const allenstein = getOwnerProvinces('GER').find((p) => p.nameZh === '阿伦施泰因')!;
+    expect(
+      findLandPath({ startProvId: berlin.id, goalProvId: allenstein.id, ownerTag: 'GER', speedTenth: 40 }),
+    ).toBeNull();
+
+    // Only when POL is explicitly in hostileTags does A* allow crossing into Warsaw
+    const wartime = findLandPath({
+      startProvId: berlin.id,
+      goalProvId: warsaw.id,
+      ownerTag: 'GER',
+      speedTenth: 40,
+      hostileTags: new Set(['POL']),
+    });
+    expect(wartime).not.toBeNull();
+    expect(wartime!.path[wartime!.path.length - 1]).toBe(warsaw.id);
   });
 });
