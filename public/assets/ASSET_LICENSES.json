@@ -100,5 +100,17 @@
     "license": "MIT / CC0 (Original Work)",
     "licenseUrl": "https://opensource.org/licenses/MIT",
     "modifications": "Hand-coded original vector SVG battle stamp and geometric staff silhouette icons."
+  },
+  {
+    "assetId": "icons_original_logistics_svg",
+    "files": [
+      "src/assets/icons/logisticsIcons.ts"
+    ],
+    "title": "Meridian 1936 Original Supply Hub Stars, Port Anchors, Oil Barrel & Weather SVG Icons",
+    "author": "Meridian 1936 Project",
+    "sourceUrl": "https://github.com/meridian-1936",
+    "license": "MIT / CC0 (Original Work)",
+    "licenseUrl": "https://opensource.org/licenses/MIT",
+    "modifications": "Hand-coded original vector SVG logistics markers, jerrycan supply alert, and procedural seasonal corner filigree."
   }
 ]
