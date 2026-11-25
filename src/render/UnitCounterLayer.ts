@@ -6,6 +6,7 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { getCountryInfo } from '../data/countries1936';
 import type { BrigadeType } from '../sim/data/brigadeTemplates';
 import type { ArmySnap, BrigadeSnap } from '../sim/systems/armyTypes';
+import type { SupplyStatus } from '../sim/systems/supplyTypes';
 import type { EuropeMapMeta, ProvinceRecord } from '../types/map';
 import {
   ARMY_BADGE_H,
@@ -64,7 +65,18 @@ interface LayoutBox {
   isLod0: boolean;
   relation: CounterRelation;
   inCombat: boolean;
+  supplyStatus: SupplyStatus;
+  starveFlash: boolean;
   alpha: number;
+}
+
+function worstSupplyStatus(list: readonly BrigadeSnap[]): SupplyStatus {
+  let status: SupplyStatus = 'ok';
+  for (const b of list) {
+    if (b.supplyStatus === 'starving') return 'starving';
+    if (b.supplyStatus === 'low') status = 'low';
+  }
+  return status;
 }
 
 export class UnitCounterLayer {
@@ -80,6 +92,8 @@ export class UnitCounterLayer {
   private armies: ArmySnap[] = [];
   private selectedBrigadeIds = new Set<number>();
   private selectedArmyId: number | null = null;
+  private prevStarvingKeys = new Set<string>();
+  private flashKeys = new Set<string>();
   private hitBoxes: CounterHitItem[] = [];
   private lastCam = { x: 1880, y: 1580, zoom: 1.0, vw: 1440, vh: 900 };
 
@@ -117,6 +131,17 @@ export class UnitCounterLayer {
         this.frontlineTargetTags.add(a.frontline.targetTag);
       }
     }
+    const nextStarving = new Set<string>();
+    const newlyStarving = new Set<string>();
+    for (const b of brigades) {
+      if (b.supplyStatus === 'starving') {
+        const k = `${b.provinceId}:${b.owner}`;
+        nextStarving.add(k);
+        if (!this.prevStarvingKeys.has(k)) newlyStarving.add(k);
+      }
+    }
+    this.prevStarvingKeys = nextStarving;
+    this.flashKeys = newlyStarving;
     this.rebuild();
   }
 
@@ -229,6 +254,8 @@ export class UnitCounterLayer {
           armyColor: box.armyColor,
           relation: box.relation,
           inCombat: box.inCombat,
+          supplyStatus: box.supplyStatus,
+          starveFlash: box.starveFlash,
         });
         const txt = new Text({ text: String(box.item.brigadeIds.length), style: COUNT_STYLE });
         txt.resolution = 2;
@@ -294,6 +321,8 @@ export class UnitCounterLayer {
         isLod0: true,
         relation: this.resolveRelation(first.owner),
         inCombat: list.some((b) => b.inCombatBattleId !== null),
+        supplyStatus: worstSupplyStatus(list),
+        starveFlash: false,
         alpha: 1,
       });
     }
@@ -344,6 +373,8 @@ export class UnitCounterLayer {
         isLod0: false,
         relation: rel,
         inCombat: list.some((b) => b.inCombatBattleId !== null),
+        supplyStatus: worstSupplyStatus(list),
+        starveFlash: this.flashKeys.has(key),
         alpha: rel === 'neutral' ? 0.42 : 1,
       });
     }

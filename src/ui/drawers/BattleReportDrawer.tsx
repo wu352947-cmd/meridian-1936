@@ -149,7 +149,9 @@ export function BattleReportDrawer({ actions }: Props) {
         </div>
         <div class="br-meta-row">
           <span>{TERRAIN_ZH[battle.terrain]}{riverText}{fortText}</span>
-          <span class="br-disabled-note">补给/制空/夜战：未启用</span>
+          <span class="br-env-note">
+            {battle.seasonNoteZh ?? '晴朗'} · {battle.isNight ? '夜间 ×0.75' : '昼间'} · 制空未启用
+          </span>
         </div>
       </div>
 
@@ -220,9 +222,10 @@ export function BattleReportDrawer({ actions }: Props) {
                     ? 'is-neg'
                     : '';
               return (
-                <div key={f.key} class={`br-factor-pill ${cls}`}>
-                  <span>{f.labelZh}</span>
+                <div key={f.key} class={`br-factor-pill ${cls}`} title={f.noteZh ?? f.labelZh}>
+                  <span class="br-factor-lbl">{f.labelZh}</span>
                   <strong>{f.enabled ? fmtMult(f.multPermille) : '未启用'}</strong>
+                  {f.enabled && f.noteZh && <span class="br-factor-note">{f.noteZh}</span>}
                 </div>
               );
             })}

@@ -5,6 +5,7 @@
 import { Graphics } from 'pixi.js';
 import { getCountryInfo } from '../data/countries1936';
 import type { BrigadeType } from '../sim/data/brigadeTemplates';
+import type { SupplyStatus } from '../sim/systems/supplyTypes';
 
 export const COUNTER_W = 46;
 export const COUNTER_H = 31;
@@ -195,6 +196,25 @@ export interface CounterDrawSpec {
   armyColor?: string;
   relation?: CounterRelation;
   inCombat?: boolean;
+  supplyStatus?: SupplyStatus;
+  starveFlash?: boolean;
+}
+
+/** Draw original miniature red jerrycan / oil barrel + exclamation mark badge at (cx, cy). */
+function drawOilBarrelAlertBadge(g: Graphics, cx: number, cy: number, starving: boolean): void {
+  const bx = cx - 5.2;
+  const by = cy - 6.0;
+  // Subtle dark shadow + brass/crimson backing
+  g.roundRect(bx + 0.8, by + 1.0, 10.4, 12.0, 2.0).fill({ color: 0x0f0807, alpha: 0.65 });
+  // Jerrycan spout/cap on top-left
+  g.roundRect(bx + 1.4, by - 1.6, 3.8, 2.2, 0.8).fill(starving ? 0xe03a2f : 0xd44638).stroke({ width: 0.85, color: 0x160a09 });
+  // Main barrel body
+  g.roundRect(bx, by, 10.4, 12.0, 2.0)
+    .fill(starving ? 0xa31b15 : 0xc63024)
+    .stroke({ width: 1.1, color: starving ? 0x160a09 : 0x260d0b });
+  // Highlight bevel & crisp ivory exclamation mark "!"
+  g.rect(bx + 4.4, by + 2.2, 1.7, 5.2).fill(0xfff5e4);
+  g.circle(bx + 5.25, by + 9.4, 1.05).fill(0xfff5e4);
 }
 
 /** Draw complete 46x31px hard-cardstock tactical counter centered at (0, 0) with clear friend/ally/foe styling. */
@@ -219,9 +239,16 @@ export function drawCardstockCounter(g: Graphics, spec: CounterDrawSpec): void {
   // Subtle drop shadow
   g.roundRect(x + 1.5, y + 2, COUNTER_W, COUNTER_H, 3.5).fill({ color: 0x120e0b, alpha: 0.44 });
 
-  // Selection brass halo or combat pulse ring
+  // Selection brass halo, starvation black-red alert frame, or combat pulse ring
+  const isStarving = spec.supplyStatus === 'starving';
+  const isLowSupply = spec.supplyStatus === 'low';
   if (spec.selected) {
     g.roundRect(x - 2.2, y - 2.2, COUNTER_W + 4.4, COUNTER_H + 4.4, 5).stroke({ width: 2.3, color: 0xf2c86b, alpha: 0.98 });
+  } else if (isStarving) {
+    if (spec.starveFlash) {
+      g.roundRect(x - 3.0, y - 3.0, COUNTER_W + 6.0, COUNTER_H + 6.0, 5.5).stroke({ width: 2.4, color: 0xf24b3d, alpha: 0.85 });
+    }
+    g.roundRect(x - 1.8, y - 1.8, COUNTER_W + 3.6, COUNTER_H + 3.6, 4.6).stroke({ width: 2.2, color: 0x170b0a, alpha: 0.96 });
   } else if (spec.inCombat) {
     g.roundRect(x - 1.5, y - 1.5, COUNTER_W + 3, COUNTER_H + 3, 4.5).stroke({ width: 1.5, color: 0xd9563f, alpha: 0.85 });
   }
@@ -261,17 +288,27 @@ export function drawCardstockCounter(g: Graphics, spec: CounterDrawSpec): void {
   g.rect(barX, y + 20.5, orgW, 4).fill(orgCol);
   g.rect(barX, y + 25.2, strW, 4).fill(strCol);
 
-  // Crisp outer frame
-  g.roundRect(x, y, COUNTER_W, COUNTER_H, 3.5).stroke({ width: frameWidth, color: frameColor });
+  // Crisp outer frame (black-red double rim when starving)
+  if (isStarving) {
+    g.roundRect(x, y, COUNTER_W, COUNTER_H, 3.5).stroke({ width: 2.4, color: 0x160a09 });
+    g.roundRect(x + 0.9, y + 0.9, COUNTER_W - 1.8, COUNTER_H - 1.8, 2.8).stroke({ width: 1.45, color: 0xd92f26 });
+  } else {
+    g.roundRect(x, y, COUNTER_W, COUNTER_H, 3.5).stroke({ width: frameWidth, color: frameColor });
+  }
 
   // Enemy top-right cinnabar corner chevron pip
-  if (rel === 'enemy') {
+  if (rel === 'enemy' && !isLowSupply && !isStarving) {
     g.poly([x + COUNTER_W - 6.5, y + 1, x + COUNTER_W - 1, y + 1, x + COUNTER_W - 1, y + 6.5]).fill(0xb83a2d);
   }
 
   // Manual override golden lock pip (top-right corner)
   if (spec.hasManualOverride) {
     g.circle(x + COUNTER_W - 3.8, y + 3.8, 2.7).fill(0xeab84b).stroke({ width: 0.8, color: 0x1a1612 });
+  }
+
+  // Original red oil-barrel exclamation badge at top-right when low supply or starving
+  if (isLowSupply || isStarving) {
+    drawOilBarrelAlertBadge(g, x + COUNTER_W - 1.2, y - 1.5, isStarving);
   }
 }
 

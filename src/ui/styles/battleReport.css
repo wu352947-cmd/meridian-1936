@@ -76,9 +76,11 @@
   margin-top: 3px;
 }
 
-.br-disabled-note {
+.br-disabled-note,
+.br-env-note {
   font-size: 10px;
-  color: #7D6D5D;
+  color: #5D4A36;
+  font-weight: 600;
 }
 
 .br-side-card {
@@ -273,6 +275,19 @@
 .br-factor-pill strong {
   font-size: 10.5px;
   color: var(--ui-text-primary);
+}
+
+.br-factor-lbl {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.br-factor-note {
+  font-family: var(--font-sans);
+  font-size: 8.5px;
+  line-height: 1.25;
+  color: #C4B7A4;
 }
 
 .br-factor-pill.is-pos strong { color: #7ED48C; }
