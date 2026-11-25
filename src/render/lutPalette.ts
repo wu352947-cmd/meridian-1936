@@ -1,6 +1,7 @@
 import { COUNTRIES_1936, TERRAIN_INFO } from '../data/countries1936';
 import { getRegionDefByProvince } from '../sim/data/regions1936';
 import type { RegionDynamicSnap } from '../sim/systems/industryTypes';
+import { getProvinceSeasonCondition } from '../sim/systems/weatherSystem';
 import type { MapMode, ProvinceRecord } from '../types/map';
 
 export function hexToRgb(hex: string): [number, number, number] {
@@ -36,13 +37,36 @@ function regionIndustryColor(reg: RegionDynamicSnap | null, fallbackInd: number,
   return [158, 76, 58];
 }
 
-/** Placeholder supply preview choropleth (Batch 02 visual preview; real BFS supply arrives in Batch 07). */
-function supplyPreviewColor(p: ProvinceRecord): [number, number, number] {
-  if (p.isCapital || p.vp >= 15 || p.industry >= 8) return [78, 138, 87];
-  if (p.isCoastal || p.terrain === 'plains' || p.terrain === 'urban') return [134, 168, 102];
-  if (p.terrain === 'forest' || p.terrain === 'hills') return [196, 172, 104];
-  if (p.terrain === 'desert' || p.terrain === 'marsh') return [194, 128, 78];
-  return [176, 86, 68]; // mountain bottleneck
+function lerpRgb(
+  a: [number, number, number],
+  b: [number, number, number],
+  t: number,
+): [number, number, number] {
+  const u = Math.max(0, Math.min(1, t));
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * u),
+    Math.round(a[1] + (b[1] - a[1]) * u),
+    Math.round(a[2] + (b[2] - a[2]) * u),
+  ];
+}
+
+/**
+ * Live M3 supply choropleth:
+ *  - Standard: Emerald (80-100) -> Amber (40-79) -> Rust Red (1-39) -> Cut-off Dark Crimson (0, hatched)
+ *  - Colorblind (Okabe-Ito): Cobalt Blue (80-100) -> Slate Gray (40-79) -> Vermilion Orange (1-39) -> Deep Charcoal (0, hatched)
+ */
+function supplyLiveColor(supplyVal: number, colorblind: boolean): [number, number, number] {
+  const s = Math.max(0, Math.min(100, supplyVal));
+  if (colorblind) {
+    if (s === 0) return [36, 40, 48];
+    if (s < 40) return lerpRgb([204, 86, 12], [228, 152, 34], s / 39);
+    if (s < 80) return lerpRgb([154, 158, 162], [72, 134, 182], (s - 40) / 39);
+    return lerpRgb([42, 118, 174], [14, 92, 156], (s - 80) / 20);
+  }
+  if (s === 0) return [52, 22, 22];
+  if (s < 40) return lerpRgb([158, 52, 42], [202, 114, 52], s / 39);
+  if (s < 80) return lerpRgb([206, 154, 62], [116, 166, 86], (s - 40) / 39);
+  return lerpRgb([86, 152, 86], [52, 126, 74], (s - 80) / 20);
 }
 
 /** Placeholder air/sea strategic theater preview (Batch 02 preview; full air/navy in Batch 10). */
@@ -97,6 +121,9 @@ export interface LutUpdateOptions {
   hoveredProvId: number | null;
   regionsById?: ReadonlyMap<number, RegionDynamicSnap>;
   controllerByProv?: ReadonlyMap<number, string>;
+  supplyByProv?: Uint8Array | null;
+  colorblind?: boolean;
+  simTick?: number;
   primaryBuf: Uint8Array;
   secondaryBuf: Uint8Array;
   occupierBuf?: Uint8Array;
@@ -105,13 +132,16 @@ export interface LutUpdateOptions {
 /**
  * Fill the 4096x1 RGBA primary, secondary, and occupier LUT buffers in O(N) (<0.1ms).
  * primary:   RGB = fill color, A = fill strength hint (255 = land, 0 = sea)
- * secondary: R = effectiveControllerIndex (0..255), G = bit7=selectedCountry | bit6=constructing, B = selectedProv, A = hoveredProv
+ * secondary: R = effectiveControllerIndex (0..255),
+ *            G = bit7=selectedCountry | bit6=constructing | bit5=supplyZero | bits0..1=weather(0/1=winter/2=mud),
+ *            B = selectedProv, A = hoveredProv
  * occupier:  RGB = occupier color when militarily occupied (controller !== coreOwner), A = 255 occupied / 0 normal
  */
 export function fillProvinceLuts(opts: LutUpdateOptions): void {
   const {
     provinces, ownerIdx, mode, selectedProvId, selectedOwner, hoveredProvId,
-    regionsById, controllerByProv, primaryBuf, secondaryBuf, occupierBuf,
+    regionsById, controllerByProv, supplyByProv, colorblind = false, simTick = 0,
+    primaryBuf, secondaryBuf, occupierBuf,
   } = opts;
   primaryBuf.fill(0);
   secondaryBuf.fill(0);
@@ -134,6 +164,7 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
     const regDef = getRegionDefByProvince(p.id);
     const regDyn = regDef && regionsById ? (regionsById.get(regDef.id) ?? null) : null;
 
+    const supVal = supplyByProv && p.id < supplyByProv.length ? supplyByProv[p.id]! : 75;
     let rgb: [number, number, number];
     if (mode === 'political') {
       const c = COUNTRIES_1936[p.owner];
@@ -147,7 +178,7 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
         rgb = hexToRgb(t?.color ?? '#E5DEC9');
       }
     } else if (mode === 'supply') {
-      rgb = supplyPreviewColor(p);
+      rgb = supplyLiveColor(supVal, colorblind);
     } else if (mode === 'diplomacy') {
       rgb = diplomacyColor(p, selectedOwner);
     } else if (mode === 'air_sea') {
@@ -164,8 +195,11 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
     const ctrl = controllerByProv?.get(p.id) ?? p.owner;
     const selFlag = selectedOwner && ctrl === selectedOwner ? 128 : 0;
     const buildFlag = regDyn && regDyn.activeBuilding ? 64 : 0;
+    const zeroSupFlag = mode === 'supply' && supVal === 0 ? 32 : 0;
+    const wx = getProvinceSeasonCondition(p.id, simTick);
+    const wxBits = wx === 'winter' ? 1 : wx === 'mud' ? 2 : 0;
     secondaryBuf[off] = ownerIdx.get(ctrl) ?? 254;
-    secondaryBuf[off + 1] = selFlag | buildFlag;
+    secondaryBuf[off + 1] = selFlag | buildFlag | zeroSupFlag | wxBits;
     secondaryBuf[off + 2] = p.id === selectedProvId ? 255 : 0;
     secondaryBuf[off + 3] = p.id === hoveredProvId ? 255 : 0;
 

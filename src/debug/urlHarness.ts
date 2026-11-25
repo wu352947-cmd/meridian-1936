@@ -47,6 +47,8 @@ export interface UrlHarnessParams {
   hoverProv: number | null;
   lang: 'zh' | 'en';
   about: boolean;
+  colorblind: boolean;
+  motorized: boolean;
 }
 
 const VALID_MODES = new Set<MapMode>([
@@ -250,6 +252,8 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     hoverProv: parseIntOrNull(sp.get('hoverProv')),
     lang: sp.get('lang') === 'en' ? 'en' : 'zh',
     about: sp.get('modal') === 'credits' || sp.get('about') === '1',
+    colorblind: isFlag('cb') || isFlag('colorblind'),
+    motorized: isFlag('motorized'),
   };
 }
 

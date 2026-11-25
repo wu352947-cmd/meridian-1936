@@ -1,9 +1,11 @@
 import { getFlagDataUri } from '../assets/flags/neutralFlags';
 import { getCountryInfo, TERRAIN_INFO } from '../data/countries1936';
 import { getRegionDefByProvince } from '../sim/data/regions1936';
+import { getPortLevel } from '../sim/data/supplySources1936';
 import { BUILDING_SPECS, INFRA_MULT_PERMILLE, type BuildingType } from '../sim/systems/industryTypes';
+import { calcSupplyCap } from '../sim/systems/supplyTypes';
 import type { ProvinceRecord } from '../types/map';
-import { simIndustrySig, simPlayerTagSig, type AppActions } from './store/simStore';
+import { simIndustrySig, simPlayerTagSig, simSupplyByProvSig, type AppActions } from './store/simStore';
 
 interface Props {
   hovered: ProvinceRecord | null;
@@ -36,6 +38,9 @@ export function ProvinceInfoCard({ hovered, selected, onClearSelected, actions }
   const totalSlots = regDyn?.slots ?? regDef?.slots ?? 4;
   const infraLvl = regDyn?.infra ?? regDef?.infra ?? 2;
   const infraMult = ((INFRA_MULT_PERMILLE[infraLvl] ?? 1000) / 1000).toFixed(2);
+  const supplyArr = simSupplyByProvSig.value;
+  const provSupply = !prov.isSea && supplyArr && prov.id < supplyArr.length ? supplyArr[prov.id]! : null;
+  const portLvl = !prov.isSea ? getPortLevel(prov.id) : 0;
 
   return (
     <aside class="prov-card" aria-label="省份情报卡">
@@ -95,9 +100,17 @@ export function ProvinceInfoCard({ hovered, selected, onClearSelected, actions }
               <span class="prov-v mono-num">{prov.vp}</span>
             </div>
             <div class="prov-kv">
-              <span class="prov-k">工业度</span>
-              <span class="prov-v mono-num">{prov.industry}</span>
+              <span class="prov-k">补给 / 供养</span>
+              <span class="prov-v mono-num">
+                {provSupply !== null ? `S=${provSupply} · 上限${calcSupplyCap(provSupply)}旅` : `${prov.industry}`}
+              </span>
             </div>
+            {portLvl > 0 && (
+              <div class="prov-kv" style="grid-column: 1 / -1;">
+                <span class="prov-k">海港补给源</span>
+                <span class="prov-v mono-num">Lv.{portLvl} 港口（S={Math.min(100, 35 + 13 * portLvl)}）</span>
+              </div>
+            )}
           </>
         ) : (
           <div class="prov-kv" style="grid-column: 1 / -1;">

@@ -32,7 +32,8 @@ uniform sampler2D uOccupierLut;
 
 uniform vec2 uMapSize;
 uniform float uZoom;
-uniform float uMode; // 0=political, 1=terrain, 2=diplomacy, 3=industry
+uniform float uMode; // 0=political, 1=terrain, 2=supply, 3=diplomacy, 4=industry, 5=air_sea
+uniform float uColorblind; // 0=standard, 1=Okabe-Ito colorblind-safe
 
 float decodeId(vec4 raw) {
   float r = floor(raw.r * 255.0 + 0.5);
@@ -83,7 +84,9 @@ void main() {
   float myOwner = sec.r;
   float gByte = floor(sec.g * 255.0 + 0.5);
   bool isSelCountry = gByte >= 127.5;
-  bool isConstructing = mod(gByte, 128.0) >= 60.0;
+  bool isConstructing = mod(gByte, 128.0) >= 63.5;
+  bool isSupplyZero = mod(gByte, 64.0) >= 31.5;
+  float weatherCode = mod(gByte, 4.0); // 0=normal, 1=winter, 2=mud
   bool isSelProv = sec.b > 0.5;
   bool isHoverProv = sec.a > 0.5;
 
@@ -203,6 +206,25 @@ void main() {
   if (uMode > 0.5 && uMode < 1.5) jitterAmt *= 0.55;
   col *= (1.0 + provJitter * jitterAmt);
 
+  // Restrained regional seasonal tint in affected climate zones (cold frost blue / warm mud umber)
+  if (weatherCode > 0.5 && weatherCode < 1.5) {
+    float frostGrain = vnoise(mapPos * 0.085) * 0.5 + vnoise(mapPos * 0.24) * 0.5;
+    float winterAmt = (uMode > 1.5 && uMode < 2.5) ? 0.11 : 0.17;
+    col = mix(col, vec3(0.76, 0.85, 0.93), winterAmt + (frostGrain - 0.5) * 0.04);
+  } else if (weatherCode >= 1.5 && weatherCode < 2.5) {
+    float siltGrain = vnoise(mapPos * 0.075) * 0.55 + vnoise(mapPos * 0.20) * 0.45;
+    float mudAmt = (uMode > 1.5 && uMode < 2.5) ? 0.10 : 0.19;
+    col = mix(col, vec3(0.45, 0.36, 0.25), mudAmt + (siltGrain - 0.5) * 0.05);
+  }
+
+  // M3 Supply cut-off (S=0): screen-pixel-space black-red (or navy-orange CB) diagonal hatching (zero Moire)
+  if (isSupplyZero && uMode > 1.5 && uMode < 2.5) {
+    float supStripe = step(mod(gl_FragCoord.x + gl_FragCoord.y, 10.0), 4.0);
+    vec3 darkStripe = uColorblind > 0.5 ? vec3(0.09, 0.12, 0.17) : vec3(0.11, 0.07, 0.07);
+    vec3 alertStripe = uColorblind > 0.5 ? vec3(0.87, 0.40, 0.08) : vec3(0.69, 0.17, 0.14);
+    col = mix(darkStripe, alertStripe, supStripe);
+  }
+
   // Subtle ink darkening right along the inner international frontier
   col *= (1.0 - edgeNear * 0.075);
 
@@ -278,6 +300,7 @@ export function createProvinceLutShader(
         uMapSize: { value: [mapWidth, mapHeight], type: 'vec2<f32>' },
         uZoom: { value: 1.0, type: 'f32' },
         uMode: { value: 0.0, type: 'f32' },
+        uColorblind: { value: 0.0, type: 'f32' },
       },
     },
   });

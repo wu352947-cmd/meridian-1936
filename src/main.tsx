@@ -12,6 +12,7 @@ import './ui/styles/armyDrawer.css';
 import './ui/styles/armyOrders.css';
 import './ui/styles/armyCards.css';
 import './ui/styles/battleReport.css';
+import './ui/styles/logistics.css';
 
 import { render } from 'preact';
 import { loadMeridianFonts } from './assets/loadFonts';
@@ -48,8 +49,10 @@ import {
   simArmySig,
   simCombatSig,
   simIndustrySig,
+  simLogisticsSig,
   simPlayerTagSig,
   simSeedSig,
+  simSupplyByProvSig,
   simTickSig,
   type AppActions,
 } from './ui/store/simStore';
@@ -61,6 +64,7 @@ async function bootstrap(): Promise<void> {
   let sim: SimClient | null = null;
 
   autotestModeSig.value = harness.autotest;
+  colorblindModeSig.value = harness.colorblind;
   screenModeSig.value = harness.screen;
   selectedCountrySig.value = initialTag;
   simSeedSig.value = harness.seed;
@@ -214,6 +218,7 @@ async function bootstrap(): Promise<void> {
     toggleColorblindMode: (enabled) => {
       const next = typeof enabled === 'boolean' ? enabled : !colorblindModeSig.value;
       colorblindModeSig.value = next;
+      stage?.setColorblind(next);
     },
     openBattleReport: (provId) => {
       selectedBattleProvIdSig.value = provId;
@@ -250,6 +255,13 @@ async function bootstrap(): Promise<void> {
         }
         if (army && stage) {
           syncArmyStage();
+        }
+        if (stage && (snap.supplyByProv || logistics)) {
+          stage.updateSupplyOverlay(
+            snap.supplyByProv ?? simSupplyByProvSig.value,
+            logistics?.allHubs ?? null,
+            snap.tick,
+          );
         }
       },
     });
@@ -380,10 +392,20 @@ async function bootstrap(): Promise<void> {
     });
 
     stage.setAutotest(harness.autotest);
+    stage.setColorblind(harness.colorblind);
     stage.setPlayerTag(initialTag);
     stage.setArmyVisible(harness.screen === 'game');
     if (simIndustrySig.value) {
       stage.updateIndustryRegions(simIndustrySig.value.regions);
+    }
+    stage.updateSupplyOverlay(
+      simSupplyByProvSig.value,
+      simLogisticsSig.value?.allHubs ?? null,
+      simTickSig.value,
+    );
+    if (harness.motorized && simArmySig.value) {
+      const firstArmy = simArmySig.value.armies.find((a) => a.owner === initialTag);
+      if (firstArmy) sim?.toggleArmyMotorizedSupply(firstArmy.id, true);
     }
     if (harness.selectArmy !== null && simArmySig.value) {
       const own = simArmySig.value.armies.filter((a) => a.owner === initialTag);

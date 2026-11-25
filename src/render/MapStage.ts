@@ -16,6 +16,7 @@ import { CurvedLabelLayer } from './CurvedLabelLayer';
 import { FrontlineArrowLayer } from './FrontlineArrowLayer';
 import { IndustryOverlayLayer } from './IndustryOverlayLayer';
 import { PocketLayer } from './PocketLayer';
+import { SupplyOverlayLayer } from './SupplyOverlayLayer';
 import { TerrainDetailLayer } from './TerrainDetailLayer';
 import { UnitCounterLayer, type CounterHitItem } from './UnitCounterLayer';
 import { buildOwnerIndexMap, fillProvinceLuts } from './lutPalette';
@@ -23,6 +24,7 @@ import { createProvinceLutShader } from './shaders/provinceLut';
 import type { ArmySnap, BrigadeSnap } from '../sim/systems/armyTypes';
 import type { CombatSystemSnapshot, ProvinceBattleSnap } from '../sim/systems/combatTypes';
 import type { RegionDynamicSnap } from '../sim/systems/industryTypes';
+import type { ActiveSupplyHubSnap } from '../sim/systems/supplyTypes';
 import type { OrderToolMode } from '../ui/store/simStore';
 
 export interface MapStageCallbacks {
@@ -69,12 +71,16 @@ export class MapStage {
   private readonly pockets: PocketLayer;
   private readonly labels: CurvedLabelLayer;
   private readonly industryOverlay: IndustryOverlayLayer;
+  private readonly supplyOverlay: SupplyOverlayLayer;
   private readonly counters: UnitCounterLayer;
   private readonly combatBubbles: CombatBubbleLayer;
   private readonly marqueeG = new Graphics();
   private readonly cbs: MapStageCallbacks;
 
   private mapMode: MapMode = 'political';
+  private colorblind = false;
+  private simTick = 0;
+  private supplyByProv: Uint8Array | null = null;
   private orderToolMode: OrderToolMode = 'select';
   private playerTag = 'GER';
   private autotest = false;
@@ -194,6 +200,7 @@ export class MapStage {
     this.pockets = new PocketLayer(this.borders.getDecodedArcs());
     this.labels = new CurvedLabelLayer(this.meta);
     this.industryOverlay = new IndustryOverlayLayer();
+    this.supplyOverlay = new SupplyOverlayLayer();
     this.counters = new UnitCounterLayer(this.meta);
     this.combatBubbles = new CombatBubbleLayer(this.meta);
 
@@ -205,6 +212,7 @@ export class MapStage {
       this.pockets.root,
       this.labels.root,
       this.industryOverlay.root,
+      this.supplyOverlay.root,
     );
     this.app.stage.addChild(this.world, this.counters.root, this.combatBubbles.root, this.marqueeG);
 
@@ -275,6 +283,7 @@ export class MapStage {
     this.labels.updateLod(this.zoom, view);
     this.pockets.updateLod(this.zoom);
     this.industryOverlay.updateLod(this.zoom, view);
+    this.supplyOverlay.updateLod(this.zoom, view);
     this.counters.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
     this.combatBubbles.setAvoidContext(
       this.counters.getPlacedScreenBoxes(),
@@ -311,6 +320,24 @@ export class MapStage {
     this.mapMode = mode;
     this.lutShader.resources.mapUniforms.uniforms.uMode = MODE_NUM[mode];
     this.industryOverlay.setMapMode(mode);
+    this.supplyOverlay.setMapMode(mode);
+    this.refreshLuts();
+  }
+
+  setColorblind(enabled: boolean): void {
+    this.colorblind = enabled;
+    this.lutShader.resources.mapUniforms.uniforms.uColorblind = enabled ? 1.0 : 0.0;
+    this.refreshLuts();
+  }
+
+  updateSupplyOverlay(
+    supplyByProv: Uint8Array | null,
+    hubs: readonly ActiveSupplyHubSnap[] | null,
+    simTick: number,
+  ): void {
+    this.simTick = simTick;
+    if (supplyByProv) this.supplyByProv = supplyByProv;
+    if (hubs) this.supplyOverlay.rebuildHubs(hubs, this.playerTag);
     this.refreshLuts();
   }
 
@@ -444,6 +471,9 @@ export class MapStage {
       hoveredProvId: this.hoveredProvId,
       regionsById: this.regionsById,
       controllerByProv: this.controllerByProv,
+      supplyByProv: this.supplyByProv,
+      colorblind: this.colorblind,
+      simTick: this.simTick,
       primaryBuf: this.primaryBuf,
       secondaryBuf: this.secondaryBuf,
       occupierBuf: this.occupierBuf,

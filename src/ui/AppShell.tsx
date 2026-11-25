@@ -10,6 +10,7 @@ import { ArmyCardsBar } from './hud/ArmyCardsBar';
 import { BottomCommandDock } from './hud/BottomCommandDock';
 import { DispatchTicker } from './hud/DispatchTicker';
 import { OrderModeCapsule } from './hud/OrderModeCapsule';
+import { SeasonalMapOverlay } from './hud/SeasonalMapOverlay';
 import { TopLeftNationBrief } from './hud/TopLeftNationBrief';
 import { TopRightClockBar } from './hud/TopRightClockBar';
 import { WipeoutBanner } from './hud/WipeoutBanner';
@@ -21,16 +22,30 @@ import {
   selectedProvSig,
   showCreditsSig,
 } from './mapStore';
-import { activeDrawerSig, screenModeSig, simPlayerTagSig, type AppActions } from './store/simStore';
+import { activeDrawerSig, colorblindModeSig, screenModeSig, simPlayerTagSig, type AppActions } from './store/simStore';
 
-const DIPLO_FACTION_LEGEND = [
+const DIPLO_FACTION_LEGEND: Array<{ label: string; color: string; hatch?: boolean }> = [
   { label: '协约同盟', color: '#4B7098' },
   { label: '中欧同盟', color: '#9C4842' },
   { label: '东方共同体', color: '#963E3A' },
   { label: '中立国', color: '#A8A091' },
 ];
 
-const LEGENDS: Partial<Record<MapMode, Array<{ label: string; color: string }>>> = {
+const SUPPLY_LEGEND_STD: Array<{ label: string; color: string; hatch?: boolean }> = [
+  { label: '充裕 (80–100)', color: '#4E8A57' },
+  { label: '吃紧 (40–79)', color: '#C8933E' },
+  { label: '缺粮 (<40)', color: '#B84736' },
+  { label: '断粮 (0)', color: '#A82A22', hatch: true },
+];
+
+const SUPPLY_LEGEND_CB: Array<{ label: string; color: string; hatch?: boolean }> = [
+  { label: '充裕 (80–100)', color: '#1B6CA8' },
+  { label: '吃紧 (40–79)', color: '#8F9AA4' },
+  { label: '缺粮 (<40)', color: '#DE6614' },
+  { label: '断粮 (0)', color: '#DE6614', hatch: true },
+];
+
+const LEGENDS: Partial<Record<MapMode, Array<{ label: string; color: string; hatch?: boolean }>>> = {
   terrain: [
     { label: '平原', color: '#E5DEC9' },
     { label: '森林', color: '#6F8260' },
@@ -95,6 +110,7 @@ export function AppShell({ actions }: Props) {
   const showCredits = showCreditsSig.value;
   const err = loadErrorSig.value;
   const drawer = activeDrawerSig.value;
+  const colorblind = colorblindModeSig.value;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -146,7 +162,11 @@ export function AppShell({ actions }: Props) {
   }, [actions]);
 
   const legendItems =
-    mode === 'diplomacy' && (!selected || selected.isSea) ? DIPLO_FACTION_LEGEND : LEGENDS[mode];
+    mode === 'supply'
+      ? (colorblind ? SUPPLY_LEGEND_CB : SUPPLY_LEGEND_STD)
+      : mode === 'diplomacy' && (!selected || selected.isSea)
+        ? DIPLO_FACTION_LEGEND
+        : LEGENDS[mode];
 
   return (
     <div class="meridian-overlay">
@@ -154,6 +174,7 @@ export function AppShell({ actions }: Props) {
         <ScenarioSelectModal actions={actions} />
       ) : (
         <>
+          <SeasonalMapOverlay />
           <TopLeftNationBrief actions={actions} />
           <TopRightClockBar actions={actions} />
           {!drawer && <DispatchTicker actions={actions} />}
@@ -162,10 +183,25 @@ export function AppShell({ actions }: Props) {
             <aside class="hud-mode-legend" aria-label="图例">
               {legendItems.map((item) => (
                 <span class="legend-item" key={item.label}>
-                  <span class="terrain-dot" style={`background:${item.color}`} />
+                  {item.hatch ? (
+                    <span class={`legend-swatch-hatch${colorblind ? ' is-cb' : ''}`} />
+                  ) : (
+                    <span class="terrain-dot" style={`background:${item.color}`} />
+                  )}
                   {item.label}
                 </span>
               ))}
+              {mode === 'supply' && (
+                <button
+                  type="button"
+                  class={`staff-btn${colorblind ? ' active' : ''}`}
+                  style="padding:1px 6px;font-size:10px;margin-left:2px;"
+                  onClick={() => actions.toggleColorblindMode()}
+                  title="切换色盲安全蓝-灰-橙补给色表 (Okabe-Ito)"
+                >
+                  {colorblind ? '色盲色表: 开' : '色盲色表'}
+                </button>
+              )}
             </aside>
           )}
 
