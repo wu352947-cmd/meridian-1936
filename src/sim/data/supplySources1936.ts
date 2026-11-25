@@ -124,7 +124,7 @@ function derivePortLevel(p: SimProvince): 0 | 1 | 2 | 3 | 4 | 5 {
   if (isRegHub && reg.doc >= 2) return 3;
   if (p.vp >= 12) return 3;
   if (p.vp >= 8 || (isRegHub && p.vp >= 6)) return 2;
-  if (p.vp >= 6) return 1;
+  if (p.vp >= 5) return 1;
   return 0;
 }
 
@@ -140,15 +140,48 @@ for (const p of SIM_PROVINCES) {
   if (cap) CAPITAL_IDS.add(cap.id);
 }
 
-const ALL_HUBS: StaticSupplyHub[] = [];
-
 for (const p of SIM_PROVINCES) {
-  const portLvl = derivePortLevel(p);
-  PORT_LEVEL_BY_PROV[p.id] = portLvl;
+  PORT_LEVEL_BY_PROV[p.id] = derivePortLevel(p);
   const isCap = CAPITAL_IDS.has(p.id);
   const isCoreCity = !isCap && p.vp >= CORE_CITY_MIN_VP;
   if (isCap) IS_CAPITAL_PROV[p.id] = 1;
   if (isCoreCity) IS_CORE_CITY_PROV[p.id] = 1;
+}
+
+// Ensure isolated 1936 islands & coastal exclaves (e.g., Shetland, Balearics, Saaremaa, Zeeland) have a Lv 1 local port
+const provById = new Map<number, SimProvince>(SIM_PROVINCES.map((p) => [p.id, p]));
+const visited = new Uint8Array(MAX_SIM_PROV_ID + 1);
+for (const p of SIM_PROVINCES) {
+  if (visited[p.id]) continue;
+  const comp: SimProvince[] = [];
+  const q: SimProvince[] = [p];
+  visited[p.id] = 1;
+  let hasHub = false;
+  while (q.length > 0) {
+    const cur = q.pop()!;
+    comp.push(cur);
+    if (IS_CAPITAL_PROV[cur.id] || IS_CORE_CITY_PROV[cur.id] || PORT_LEVEL_BY_PROV[cur.id]! > 0) hasHub = true;
+    for (const nbId of cur.neighbors) {
+      if (visited[nbId]) continue;
+      const nb = provById.get(nbId);
+      if (nb && nb.owner === p.owner) {
+        visited[nbId] = 1;
+        q.push(nb);
+      }
+    }
+  }
+  if (!hasHub && p.owner !== 'EDG') {
+    const coastal = comp.filter((c) => c.isCoastal && !NON_SEAPORT_IDS.has(c.id)).sort((a, b) => b.vp - a.vp || a.id - b.id);
+    if (coastal[0]) PORT_LEVEL_BY_PROV[coastal[0].id] = 1;
+  }
+}
+
+const ALL_HUBS: StaticSupplyHub[] = [];
+
+for (const p of SIM_PROVINCES) {
+  const portLvl = PORT_LEVEL_BY_PROV[p.id]!;
+  const isCap = IS_CAPITAL_PROV[p.id] === 1;
+  const isCoreCity = IS_CORE_CITY_PROV[p.id] === 1;
 
   if (isCap) {
     ALL_HUBS.push({
