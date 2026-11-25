@@ -4,6 +4,7 @@
  */
 import type { BrigadeType } from '../data/brigadeTemplates';
 import type { EquipmentType } from './industryTypes';
+import type { SupplyStatus } from './supplyTypes';
 
 export interface BrigadeState {
   id: number;
@@ -34,6 +35,12 @@ export interface BrigadeState {
   inCombatBattleId: number | null;
   /** True while executing forced retreat after defeat. */
   retreating: boolean;
+  /** Consecutive 6-hour ticks spent in a province with S_p = 0 (starvation starts at >=8). */
+  zeroSupplyTicks: number;
+  /** Live supply state refreshed each tick ('ok' | 'low' | 'starving'). */
+  supplyStatus: SupplyStatus;
+  /** Last evaluated province supply level S_p (0..100). */
+  supplyValue: number;
 }
 
 export interface TrainingOrderState {
@@ -89,6 +96,8 @@ export interface ArmyState {
   brigadeIds: number[];
   frontline: FrontlineOrder | null;
   arrow: OffensiveArrowOrder | null;
+  /** Whether motorized supply trucks (-3 supply impedance) are enabled for this army. */
+  motorizedSupply: boolean;
 }
 
 export interface TrainingOrderSnap {
@@ -123,6 +132,9 @@ export interface BrigadeSnap {
   planPermille: number;
   inCombatBattleId: number | null;
   retreating: boolean;
+  zeroSupplyTicks: number;
+  supplyStatus: SupplyStatus;
+  supplyValue: number;
 }
 
 export interface ArmySnap {
@@ -134,6 +146,8 @@ export interface ArmySnap {
   brigadeIds: number[];
   frontline: FrontlineOrder | null;
   arrow: OffensiveArrowOrder | null;
+  /** Whether motorized supply trucks (-3 supply impedance) are enabled for this army. */
+  motorizedSupply: boolean;
 }
 
 export interface ArmySystemSnapshot {

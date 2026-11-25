@@ -106,6 +106,7 @@ export class ArmySystem {
       brigadeIds: [],
       frontline: null,
       arrow: null,
+      motorizedSupply: false,
     };
     this.armies.push(a);
     this.armyById.set(a.id, a);
@@ -141,6 +142,9 @@ export class ArmySystem {
       planPermille: 0,
       inCombatBattleId: null,
       retreating: false,
+      zeroSupplyTicks: 0,
+      supplyStatus: 'ok',
+      supplyValue: 100,
     };
     this.brigades.push(b);
     this.brigadeById.set(b.id, b);
@@ -197,6 +201,13 @@ export class ArmySystem {
       }
     }
     army.commanderId = commanderId;
+    return true;
+  }
+
+  toggleArmyMotorizedSupply(owner: string, armyId: number, enabled?: boolean): boolean {
+    const army = this.armyById.get(armyId);
+    if (!army || army.owner !== owner) return false;
+    army.motorizedSupply = typeof enabled === 'boolean' ? enabled : !army.motorizedSupply;
     return true;
   }
 
@@ -357,12 +368,17 @@ export class ArmySystem {
   }
 
   /** Dispatch non-manualOverride brigades of an army evenly onto its bound frontline. */
-  dispatchArmyFrontline(army: ArmyState, speedModPermille: number, getController?: ControllerResolver): void {
+  dispatchArmyFrontline(
+    army: ArmyState,
+    speedModPermille: number,
+    getController?: ControllerResolver,
+    getSupplyCap?: (provId: number) => number,
+  ): void {
     if (!army.frontline) return;
     const brigs = army.brigadeIds
       .map((id) => this.brigadeById.get(id))
       .filter((b): b is BrigadeState => b !== undefined);
-    const assignMap = computeFrontlineAssignments(army.frontline, brigs, army.owner, getController);
+    const assignMap = computeFrontlineAssignments(army.frontline, brigs, army.owner, getController, getSupplyCap);
     const spd = this.getArmySpeedMod(army.owner, army.id, speedModPermille);
     for (const [bid, targetProvId] of assignMap.entries()) {
       const b = this.brigadeById.get(bid);
@@ -410,6 +426,8 @@ export class ArmySystem {
       getController?: ControllerResolver;
       onBeforeEnterProvince?: (b: BrigadeState, nextProvId: number) => StepEnterDecision;
       onEnteredProvince?: (b: BrigadeState, provId: number) => void;
+      getMarchMultPermille?: (b: BrigadeState, toProvId: number) => number;
+      getSupplyCap?: (provId: number) => number;
     },
   ): void {
     stepBrigadesMovementTick(
@@ -417,10 +435,11 @@ export class ArmySystem {
       (tag, aid) => this.getArmySpeedMod(tag, aid, getSpeedMod(tag)),
       hooks?.onBeforeEnterProvince,
       hooks?.onEnteredProvince,
+      hooks?.getMarchMultPermille,
     );
     for (const army of this.armies) {
       if (army.frontline) {
-        this.dispatchArmyFrontline(army, getSpeedMod(army.owner), hooks?.getController);
+        this.dispatchArmyFrontline(army, getSpeedMod(army.owner), hooks?.getController, hooks?.getSupplyCap);
       }
     }
   }

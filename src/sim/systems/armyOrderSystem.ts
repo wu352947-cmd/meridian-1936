@@ -104,6 +104,7 @@ export function computeFrontlineAssignments(
   armyBrigades: readonly BrigadeState[],
   ownerTag: string,
   getController: ControllerResolver = defaultController,
+  getSupplyCap?: (provId: number) => number,
 ): Map<number, number> {
   const assignments = new Map<number, number>();
   const eligible = armyBrigades.filter((b) => !b.manualOverride && b.inCombatBattleId === null && !b.retreating);
@@ -130,11 +131,26 @@ export function computeFrontlineAssignments(
     const brigs = brigsByComp.get(c);
     if (!brigs || brigs.length === 0) continue;
 
-    // Build exact target slot list: round-robin spread guarantees every province gets floor(N/M) or ceil(N/M)
+    // Build supply-cap-aware target slot list: round-robin spread without overfilling N >= Cap_p
     const slots: number[] = [];
     if (brigs.length >= frontProvs.length) {
-      for (let i = 0; i < brigs.length; i++) {
-        slots.push(frontProvs[i % frontProvs.length]!);
+      const assignedCount = new Map<number, number>();
+      let round = 0;
+      while (slots.length < brigs.length) {
+        let addedAny = false;
+        for (const pid of frontProvs) {
+          if (slots.length >= brigs.length) break;
+          const cap = getSupplyCap ? Math.max(1, getSupplyCap(pid)) : 999;
+          const cur = assignedCount.get(pid) ?? 0;
+          if (cur < cap) {
+            slots.push(pid);
+            assignedCount.set(pid, cur + 1);
+            addedAny = true;
+          }
+        }
+        if (!addedAny) break; // All frontline provinces reached Cap_p; do NOT keep stacking overflow
+        round += 1;
+        if (round > 32) break;
       }
     } else {
       for (let i = 0; i < brigs.length; i++) {
@@ -143,9 +159,10 @@ export function computeFrontlineAssignments(
       }
     }
 
-    // Deterministic nearest-distance matching (minimizes travel while strictly filling all slots)
+    // Deterministic nearest-distance matching (minimizes travel while strictly respecting supply cap)
     const freeBrigs = [...brigs].sort((a, b) => a.id - b.id);
     for (const targetProvId of slots) {
+      if (freeBrigs.length === 0) break;
       const tp = getSimProvince(targetProvId)!;
       let bestIdx = 0;
       let bestDist = Infinity;

@@ -56,6 +56,7 @@ export function stepBrigadesMovementTick(
   getSpeedMod: (tag: string, armyId: number | null) => number,
   onBeforeEnterProvince?: (b: BrigadeState, nextProvId: number) => StepEnterDecision,
   onEnteredProvince?: (b: BrigadeState, provId: number) => void,
+  getMarchMultPermille?: (b: BrigadeState, toProvId: number) => number,
 ): void {
   for (const b of brigades) {
     if (b.inCombatBattleId !== null) continue;
@@ -90,7 +91,8 @@ export function stepBrigadesMovementTick(
     }
 
     b.entrenchPermille = 0;
-    b.moveProgressFixed += FIXED_SCALE;
+    const stepGain = getMarchMultPermille ? Math.max(200, Math.min(1500, getMarchMultPermille(b, nextProv))) : FIXED_SCALE;
+    b.moveProgressFixed += stepGain;
     while (b.path.length > 0 && b.moveProgressFixed >= b.moveEdgeCostFixed) {
       const candidate = b.path[0]!;
       if (onBeforeEnterProvince) {
@@ -171,6 +173,9 @@ export function toBrigadeSnap(b: BrigadeState, speedModPermille: number): Brigad
     planPermille: b.planPermille,
     inCombatBattleId: b.inCombatBattleId,
     retreating: b.retreating,
+    zeroSupplyTicks: b.zeroSupplyTicks,
+    supplyStatus: b.supplyStatus,
+    supplyValue: b.supplyValue,
   };
 }
 
@@ -192,6 +197,7 @@ export function toArmySnap(a: ArmyState): ArmySnap {
     arrow: a.arrow
       ? { ...a.arrow, waypointProvIds: a.arrow.waypointProvIds.slice() }
       : null,
+    motorizedSupply: a.motorizedSupply,
   };
 }
 
@@ -207,10 +213,11 @@ export function mixArmyStateHash(
     mix(b.orgPermille + (b.strengthPermille << 10) + (b.manualOverride ? 1 << 24 : 0));
     mix(b.moveProgressFixed ^ (b.path.length << 16) ^ (b.moveTargetProvId ?? 0));
     mix(b.entrenchPermille + (b.planPermille << 10) + ((b.inCombatBattleId ?? 0) << 20) + (b.retreating ? 1 << 30 : 0));
+    mix(b.zeroSupplyTicks + (b.supplyValue << 10));
   }
   mix(armies.length);
   for (const a of armies) {
-    mix(a.id + (a.brigadeIds.length << 12) + (a.commanderId ? a.commanderId.length << 20 : 0));
+    mix(a.id + (a.brigadeIds.length << 12) + (a.commanderId ? a.commanderId.length << 20 : 0) + (a.motorizedSupply ? 1 << 28 : 0));
     mix((a.frontline?.friendlyProvIds.length ?? 0) + ((a.arrow?.targetProvId ?? 0) << 8));
   }
   mix(training.length);
