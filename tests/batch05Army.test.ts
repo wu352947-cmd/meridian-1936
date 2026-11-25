@@ -24,6 +24,8 @@ import {
   refundTrainingOrder,
 } from '../src/sim/systems/trainingSystem';
 import { calcEdgeMarchTicksFixed, findLandPath } from '../src/sim/systems/pathfinding';
+import { ArmySystem } from '../src/sim/systems/armySystem';
+import { buildFrontlineOrder } from '../src/sim/systems/armyOrderSystem';
 
 describe('Batch 05 Land Brigades, Training, A* Marching, Frontlines & Orders', () => {
   it('1. validates 6 fixed brigade templates schema/stats and combat slot constants (4+2, 3+1, 5+2, flanking +2/+1)', () => {
@@ -245,5 +247,79 @@ describe('Batch 05 Land Brigades, Training, A* Marching, Frontlines & Orders', (
     });
     expect(wartime).not.toBeNull();
     expect(wartime!.path[wartime!.path.length - 1]).toBe(warsaw.id);
+  });
+
+  it('4. extracts continuous frontline chains and evenly spreads army brigades along the border with zero gaps', () => {
+    // POL -> GER border is a single contiguous frontier of 8 Polish border provinces
+    const polFront = buildFrontlineOrder('POL', 'GER')!;
+    expect(polFront).not.toBeNull();
+    expect(polFront.friendlyProvIds.length).toBeGreaterThanOrEqual(6);
+    // Check chain ordering: consecutive provinces along each component share adjacency (at most 1 component break)
+    let jumps = 0;
+    for (let i = 1; i < polFront.friendlyProvIds.length; i++) {
+      const prev = getSimProvince(polFront.friendlyProvIds[i - 1]!)!;
+      if (!prev.neighbors.includes(polFront.friendlyProvIds[i]!)) jumps += 1;
+    }
+    expect(jumps).toBeLessThanOrEqual(1);
+
+    // Bind POL 1st Army (11 brigades >= 8 border provs) -> step until arrival -> EVERY border province covered!
+    const sys = new ArmySystem();
+    sys.reset();
+    const polArmy = sys.getArmiesFor('POL')[0]!;
+    expect(polArmy.brigadeIds.length).toBeGreaterThanOrEqual(polFront.friendlyProvIds.length);
+    expect(sys.bindFrontline('POL', polArmy.id, 'GER', 0)).toBe(true);
+    for (let t = 0; t < 80; t++) sys.stepTick(() => 0);
+
+    const occupied = new Set(polArmy.brigadeIds.map((id) => sys.getBrigade(id)!.provinceId));
+    for (const fpid of polFront.friendlyProvIds) {
+      expect(occupied.has(fpid), `Gap left on POL frontline province ${fpid}`).toBe(true);
+    }
+
+    // Check demoFrontline=GER_POL leaves zero gaps across ALL GER-POL border provinces and stores Warsaw arrow
+    const demo = new ArmySystem();
+    demo.reset();
+    demo.applyDemoFrontline('GER_POL');
+    const ger1 = demo.getArmiesFor('GER')[0]!;
+    expect(ger1.frontline?.targetTag).toBe('POL');
+    expect(ger1.arrow?.targetProvId).toBe(getCapitalProvince('POL')!.id);
+    const ger1Occupied = new Set(ger1.brigadeIds.map((id) => demo.getBrigade(id)!.provinceId));
+    for (const fpid of ger1.frontline!.friendlyProvIds) {
+      expect(ger1Occupied.has(fpid), `Gap left on GER demo frontline province ${fpid}`).toBe(true);
+    }
+  });
+
+  it('5. protects manualOverride brigades from army frontline AI until arrival at destination', () => {
+    const sys = new ArmySystem();
+    sys.reset();
+    const polArmy = sys.getArmiesFor('POL')[0]!;
+    sys.bindFrontline('POL', polArmy.id, 'GER', 0);
+    for (let t = 0; t < 60; t++) sys.stepTick(() => 0);
+
+    const lockedId = polArmy.brigadeIds[0]!;
+    const locked = sys.getBrigade(lockedId)!;
+    // Order this single brigade to march away from the German border to an interior/eastern Polish province (Warsaw or east)
+    const polProvs = getOwnerProvinces('POL');
+    const frontSet = new Set(polArmy.frontline!.friendlyProvIds);
+    const rearProv = polProvs.find((p) => !frontSet.has(p.id) && p.id !== locked.provinceId)!;
+    expect(rearProv).toBeDefined();
+
+    expect(sys.marchBrigades('POL', [lockedId], rearProv.id, 0)).toBe(1);
+    expect(locked.manualOverride).toBe(true);
+    expect(locked.moveTargetProvId).toBe(rearProv.id);
+
+    // Step tick-by-tick: while en route, army frontline AI runs every tick and MUST NOT hijack locked brigade
+    let arrived = false;
+    for (let t = 0; t < 120; t++) {
+      sys.stepTick(() => 0);
+      if (locked.provinceId === rearProv.id) {
+        arrived = true;
+        break;
+      }
+      expect(locked.manualOverride).toBe(true);
+      expect(locked.moveTargetProvId).toBe(rearProv.id);
+    }
+    expect(arrived).toBe(true);
+    // Once arrived, manualOverride clears cleanly so army AI may resume control on subsequent ticks
+    expect(locked.manualOverride).toBe(false);
   });
 });
