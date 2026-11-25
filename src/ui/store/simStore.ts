@@ -8,6 +8,7 @@ import type { TickerDispatch } from '../../sim/core/SimEngine';
 import type { SimNationSnapshot, WorldSnapshot } from '../../sim/core/SnapshotCodec';
 import type { BrigadeType } from '../../sim/data/brigadeTemplates';
 import type { ArmySystemSnapshot } from '../../sim/systems/armyTypes';
+import type { CombatSystemSnapshot } from '../../sim/systems/combatTypes';
 import type { GovernanceLawId, GovernanceSlot, GovernanceSnapshot } from '../../sim/systems/governanceTypes';
 import type { BuildingType, EquipmentType, IndustrySnapshot } from '../../sim/systems/industryTypes';
 import type { TechSnapshot } from '../../sim/systems/techTypes';
@@ -25,6 +26,7 @@ export const tickerExpandedSig = signal<boolean>(true);
 export const orderToolModeSig = signal<OrderToolMode>('select');
 export const selectedBrigadeIdsSig = signal<number[]>([]);
 export const selectedArmyIdSig = signal<number | null>(null);
+export const selectedBattleProvIdSig = signal<number | null>(null);
 
 export const simReadySig = signal<boolean>(false);
 export const simTickSig = signal<number>(0);
@@ -39,6 +41,7 @@ export const simIndustrySig = signal<IndustrySnapshot | null>(null);
 export const simGovernanceSig = signal<GovernanceSnapshot | null>(null);
 export const simTechSig = signal<TechSnapshot | null>(null);
 export const simArmySig = signal<ArmySystemSnapshot | null>(null);
+export const simCombatSig = signal<CombatSystemSnapshot | null>(null);
 
 export function applyWorldSnapshot(
   snap: WorldSnapshot,
@@ -47,6 +50,7 @@ export function applyWorldSnapshot(
   governance?: GovernanceSnapshot,
   tech?: TechSnapshot,
   army?: ArmySystemSnapshot,
+  combat?: CombatSystemSnapshot,
 ): void {
   const byTag: Record<string, SimNationSnapshot> = {};
   for (const n of snap.nations) byTag[n.tag] = n;
@@ -62,6 +66,7 @@ export function applyWorldSnapshot(
     if (governance) simGovernanceSig.value = governance;
     if (tech) simTechSig.value = tech;
     if (army) simArmySig.value = army;
+    if (combat) simCombatSig.value = combat;
     simReadySig.value = true;
   });
 }
@@ -102,4 +107,7 @@ export interface AppActions {
   clearFrontline: (armyId: number) => void;
   setOffensiveArrow: (armyId: number, startProvId: number | null, targetProvId: number, bendX?: number, bendY?: number) => void;
   clearOffensiveArrow: (armyId: number) => void;
+  toggleArrowActive: (armyId: number, active?: boolean) => void;
+  assignCommander: (armyId: number, commanderId: string | null) => void;
+  openBattleReport: (provId: number) => void;
 }

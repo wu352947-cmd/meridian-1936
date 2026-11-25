@@ -65,6 +65,13 @@ const DRAWER_SPEC: Record<
     summary: '统辖 6 类标准作战旅编制、可见连续参谋战线、钳形进攻箭头与透明前锋/支援陆战结算。',
     items: ['改良北约战术军牌与双进度条显示', '边境自动吸附连续战线与微操覆盖锁', '侧翼夹击拓宽与合围口袋全歼战报'],
   },
+  battle: {
+    fkey: '战报',
+    title: '省级战地简报与乘数拆解',
+    batchTag: 'Batch 06',
+    summary: '实时展示省级交战前锋/支援槽位、预备队与逐项透明攻防乘数拆解。',
+    items: ['前锋/支援宽度与多方向夹击拓宽', '地形/渡河/要塞/堑壕/筹备逐项乘算', '装甲压制与 6 小时实时战况评估'],
+  },
 };
 
 export function RightDossierDrawer({ actions, onClose }: Props) {

@@ -11,7 +11,7 @@ import type { BuildingType } from '../sim/systems/industryTypes';
 import type { MapMode } from '../types/map';
 
 export type ScreenMode = 'country_select' | 'game';
-export type DrawerTab = 'directives' | 'diplomacy' | 'industry' | 'tech' | 'logistics' | 'army';
+export type DrawerTab = 'directives' | 'diplomacy' | 'industry' | 'tech' | 'logistics' | 'army' | 'battle';
 export type IndustrySubTab = 'production' | 'construction' | 'trade';
 
 export interface UrlHarnessParams {
@@ -20,6 +20,7 @@ export interface UrlHarnessParams {
   scenario: '1936';
   country: string;
   date: string | null;
+  tick: number | null;
   seed: number;
   paused: boolean | null;
   speed: SimSpeed | null;
@@ -37,6 +38,8 @@ export interface UrlHarnessParams {
   laws: Array<{ slot: GovernanceSlot; lawId: GovernanceLawId }>;
   research: string[];
   demoFrontline: string | null;
+  mockWar: string | null;
+  selectArmy: number | null;
   train: BrigadeType[];
   mapmode: MapMode;
   cam: { x: number; y: number; zoom: number } | null;
@@ -62,6 +65,7 @@ const VALID_PANELS = new Set<DrawerTab>([
   'tech',
   'logistics',
   'army',
+  'battle',
 ]);
 
 const VALID_SUBTABS = new Set<IndustrySubTab>(['production', 'construction', 'trade']);
@@ -199,6 +203,11 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
   const rawDemoFrontline = sp.get('demoFrontline')?.trim() ?? '';
   const demoFrontline = rawDemoFrontline ? rawDemoFrontline.toUpperCase() : null;
 
+  const rawMockWar = sp.get('mockWar')?.trim() ?? '';
+  const mockWar = rawMockWar ? rawMockWar.toUpperCase() : null;
+  const tick = parseIntOrNull(sp.get('tick'));
+  const selectArmy = parseIntOrNull(sp.get('selectArmy'));
+
   const train: BrigadeType[] = [];
   const rawTrain = sp.get('train');
   if (rawTrain) {
@@ -214,6 +223,7 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     scenario: '1936',
     country,
     date,
+    tick,
     seed,
     paused,
     speed,
@@ -231,6 +241,8 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     laws,
     research,
     demoFrontline,
+    mockWar,
+    selectArmy,
     train,
     mapmode,
     cam,

@@ -32,13 +32,16 @@ export type CommandType =
   | 'BIND_FRONTLINE'
   | 'CLEAR_FRONTLINE'
   | 'SET_OFFENSIVE_ARROW'
-  | 'CLEAR_OFFENSIVE_ARROW';
+  | 'CLEAR_OFFENSIVE_ARROW'
+  | 'TOGGLE_ARROW_ACTIVE'
+  | 'ASSIGN_COMMANDER';
 
 export interface InitScenarioPayload {
   scenarioId: '1936';
   countryTag: string;
   seed: number;
   startDate?: string;
+  fastForwardTicks?: number;
   paused?: boolean;
   speed?: SimSpeed;
   autoTrade?: boolean;
@@ -53,6 +56,7 @@ export interface InitScenarioPayload {
   initialLaws?: Array<{ slot: GovernanceSlot; lawId: GovernanceLawId }>;
   initialResearch?: string[];
   demoFrontline?: string;
+  mockWar?: string;
   initialTraining?: Array<{ template: BrigadeType; deployProvId?: number }>;
 }
 
@@ -168,6 +172,16 @@ export interface ClearOffensiveArrowPayload {
   armyId: number;
 }
 
+export interface ToggleArrowActivePayload {
+  armyId: number;
+  active?: boolean;
+}
+
+export interface AssignCommanderPayload {
+  armyId: number;
+  commanderId: string | null;
+}
+
 export type GameCommandPayload =
   | InitScenarioPayload
   | SelectCountryPayload
@@ -193,7 +207,9 @@ export type GameCommandPayload =
   | BindFrontlinePayload
   | ClearFrontlinePayload
   | SetOffensiveArrowPayload
-  | ClearOffensiveArrowPayload;
+  | ClearOffensiveArrowPayload
+  | ToggleArrowActivePayload
+  | AssignCommanderPayload;
 
 export interface GameCommand<T extends CommandType = CommandType> {
   tick: number;

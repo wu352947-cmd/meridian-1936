@@ -9,6 +9,7 @@ import type { TickerDispatch } from '../../sim/core/SimEngine';
 import type { BrigadeType } from '../../sim/data/brigadeTemplates';
 import { PLAYABLE_TAG_LIST } from '../../sim/data/nations1936';
 import type { ArmySystemSnapshot } from '../../sim/systems/armyTypes';
+import type { CombatSystemSnapshot } from '../../sim/systems/combatTypes';
 import type { GovernanceLawId, GovernanceSlot, GovernanceSnapshot } from '../../sim/systems/governanceTypes';
 import type { BuildingType, EquipmentType, IndustrySnapshot } from '../../sim/systems/industryTypes';
 import type { TechSnapshot } from '../../sim/systems/techTypes';
@@ -22,6 +23,7 @@ export interface SimClientHandlers {
     governance?: GovernanceSnapshot,
     tech?: TechSnapshot,
     army?: ArmySystemSnapshot,
+    combat?: CombatSystemSnapshot,
   ) => void;
 }
 
@@ -59,7 +61,7 @@ export class SimClient {
         const ret: MainToWorkerMessage = { type: 'RETURN_BUFFER', buffer: msg.buffer };
         this.worker.postMessage(ret, [msg.buffer]);
 
-        handlers.onSnapshot(snap, msg.dispatches, msg.industry, msg.governance, msg.tech, msg.army);
+        handlers.onSnapshot(snap, msg.dispatches, msg.industry, msg.governance, msg.tech, msg.army, msg.combat);
 
         if (this.snapshotWaiters.length > 0) {
           const waiters = this.snapshotWaiters.splice(0);
@@ -194,6 +196,14 @@ export class SimClient {
 
   clearOffensiveArrow(armyId: number): void {
     this.sendCommand('CLEAR_OFFENSIVE_ARROW', { armyId });
+  }
+
+  toggleArrowActive(armyId: number, active?: boolean): void {
+    this.sendCommand('TOGGLE_ARROW_ACTIVE', { armyId, active });
+  }
+
+  assignCommander(armyId: number, commanderId: string | null): void {
+    this.sendCommand('ASSIGN_COMMANDER', { armyId, commanderId });
   }
 
   stepOnce(): void {

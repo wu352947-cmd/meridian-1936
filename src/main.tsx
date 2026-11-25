@@ -39,9 +39,11 @@ import {
   orderToolModeSig,
   screenModeSig,
   selectedArmyIdSig,
+  selectedBattleProvIdSig,
   selectedBrigadeIdsSig,
   selectedCountrySig,
   simArmySig,
+  simCombatSig,
   simIndustrySig,
   simPlayerTagSig,
   simSeedSig,
@@ -190,6 +192,16 @@ async function bootstrap(): Promise<void> {
     clearOffensiveArrow: (armyId) => {
       sim?.clearOffensiveArrow(armyId);
     },
+    toggleArrowActive: (armyId, active) => {
+      sim?.toggleArrowActive(armyId, active);
+    },
+    assignCommander: (armyId, commanderId) => {
+      sim?.assignCommander(armyId, commanderId);
+    },
+    openBattleReport: (provId) => {
+      selectedBattleProvIdSig.value = provId;
+      activeDrawerSig.value = 'battle';
+    },
   };
 
   const uiRoot = document.getElementById('ui-root');
@@ -206,8 +218,8 @@ async function bootstrap(): Promise<void> {
 
   try {
     sim = new SimClient({
-      onSnapshot: (snap, dispatches, industry, governance, tech, army) => {
-        applyWorldSnapshot(snap, dispatches, industry, governance, tech, army);
+      onSnapshot: (snap, dispatches, industry, governance, tech, army, combat) => {
+        applyWorldSnapshot(snap, dispatches, industry, governance, tech, army, combat);
         if (industry && stage) {
           stage.updateIndustryRegions(industry.regions);
         }
@@ -229,6 +241,7 @@ async function bootstrap(): Promise<void> {
         countryTag: initialTag,
         seed: harness.seed,
         startDate: harness.date ?? undefined,
+        fastForwardTicks: harness.tick ?? undefined,
         paused: initialPaused,
         speed: initialSpeed,
         autoTrade: harness.autotrade ?? undefined,
@@ -243,6 +256,7 @@ async function bootstrap(): Promise<void> {
         initialLaws: harness.laws.length > 0 ? harness.laws : undefined,
         initialResearch: harness.research.length > 0 ? harness.research : undefined,
         demoFrontline: harness.demoFrontline ?? undefined,
+        mockWar: harness.mockWar ?? undefined,
         initialTraining: harness.train.length > 0 ? harness.train.map((template) => ({ template })) : undefined,
       }),
     ]);
@@ -293,11 +307,15 @@ async function bootstrap(): Promise<void> {
         if (screenModeSig.value !== 'game') return;
         const pTag = simPlayerTagSig.value;
         const selIds = selectedBrigadeIdsSig.value;
-        if (prov.owner === pTag && selIds.length > 0) {
+        const combat = simCombatSig.value;
+        const occ = combat?.occupiedProvinces.find((o) => o.provId === prov.id);
+        const ctrl = occ ? occ.controller : prov.owner;
+        const isEnemy = combat?.wars.some(([a, b]) => (a === pTag && b === ctrl) || (b === pTag && a === ctrl)) ?? false;
+        if ((ctrl === pTag || isEnemy) && selIds.length > 0) {
           actions.marchBrigades(selIds, prov.id);
-        } else if (prov.owner !== pTag) {
+        } else if (ctrl !== pTag) {
           const aid = resolveActiveArmyId();
-          if (aid !== null) actions.bindFrontline(aid, prov.owner);
+          if (aid !== null) actions.bindFrontline(aid, ctrl);
         }
       },
       onOrderClickProvince: (prov) => {
@@ -337,6 +355,17 @@ async function bootstrap(): Promise<void> {
     stage.setArmyVisible(harness.screen === 'game');
     if (simIndustrySig.value) {
       stage.updateIndustryRegions(simIndustrySig.value.regions);
+    }
+    if (harness.selectArmy !== null && simArmySig.value) {
+      const own = simArmySig.value.armies.filter((a) => a.owner === initialTag);
+      const picked = own[harness.selectArmy - 1] ?? own[0];
+      if (picked) {
+        selectedArmyIdSig.value = picked.id;
+        selectedBrigadeIdsSig.value = picked.brigadeIds;
+      }
+    }
+    if (harness.panel === 'battle' && simCombatSig.value && simCombatSig.value.battles.length > 0) {
+      selectedBattleProvIdSig.value = simCombatSig.value.battles[0]!.provinceId;
     }
     syncArmyStage();
 
