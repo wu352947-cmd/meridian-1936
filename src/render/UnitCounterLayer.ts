@@ -148,6 +148,16 @@ export class UnitCounterLayer {
     return this.hitBoxes.map((b) => [b.sx - b.w * 0.5 - 3, b.sy - b.h * 0.5 - 3, b.sx + b.w * 0.5 + 3, b.sy + b.h * 0.5 + 3]);
   }
 
+  getPlacedCentersByProvince(): Map<number, Array<{ sx: number; sy: number; w: number; h: number }>> {
+    const out = new Map<number, Array<{ sx: number; sy: number; w: number; h: number }>>();
+    for (const b of this.hitBoxes) {
+      const list = out.get(b.provinceId) ?? [];
+      list.push({ sx: b.sx, sy: b.sy, w: b.w, h: b.h });
+      out.set(b.provinceId, list);
+    }
+    return out;
+  }
+
   hitTestMarquee(x0: number, y0: number, x1: number, y1: number, ownerTag: string): number[] {
     if (!this.root.visible) return [];
     const minX = Math.min(x0, x1);

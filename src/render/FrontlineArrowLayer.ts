@@ -18,7 +18,8 @@ import {
 } from './frontlineGeometry';
 import {
   drawPolygonPencilHatch,
-  tryPlaceCurvedStaffLabel,
+  tryPlaceArrowLabel,
+  tryPlaceFrontlineLabel,
   type LabelViewTransform,
   type ScreenBox,
 } from './FrontlineLabelHelper';
@@ -60,7 +61,7 @@ export class FrontlineArrowLayer {
   private avoidBoxes: readonly ScreenBox[] = [];
   private flowPhase = 0.25;
   private frontSamplesByArmy = new Map<number, OffsetSample[]>();
-  private frontChainsByArmy = new Map<number, Pt[][]>();
+  private frontChainSamplesByArmy = new Map<number, OffsetSample[][]>();
   private arrowSamplesByArmy = new Map<number, Pt[]>();
 
   constructor(
@@ -172,7 +173,7 @@ export class FrontlineArrowLayer {
   private redrawFrontlines(): void {
     this.frontG.clear();
     this.frontSamplesByArmy.clear();
-    this.frontChainsByArmy.clear();
+    this.frontChainSamplesByArmy.clear();
 
     const s = 1 / Math.pow(Math.max(0.65, this.zoom), 0.52);
     const offsetPx = 3.2 * s;
@@ -201,12 +202,12 @@ export class FrontlineArrowLayer {
       );
 
       const allSamples: OffsetSample[] = [];
-      const chainPts: Pt[][] = [];
+      const chainSamples: OffsetSample[][] = [];
       for (const chain of chains) {
         const samples = buildOffsetFrontlineSamples(chain, offsetPx, Math.max(2.6, 4.2 * s));
         if (samples.length < 2) continue;
         allSamples.push(...samples);
-        chainPts.push(samples.map((sm) => [sm.x, sm.y] as Pt));
+        chainSamples.push(samples);
 
         // 1. Bold double-layer ink backing + mineral army color ribbon
         const trace = () => {
@@ -242,7 +243,7 @@ export class FrontlineArrowLayer {
         }
       }
       this.frontSamplesByArmy.set(army.id, allSamples);
-      this.frontChainsByArmy.set(army.id, chainPts);
+      this.frontChainSamplesByArmy.set(army.id, chainSamples);
     }
   }
 
@@ -295,7 +296,7 @@ export class FrontlineArrowLayer {
     const s = 1 / Math.pow(Math.max(0.7, this.zoom), 0.42);
     const headLen = Math.min(totalLen * 0.34, 24 * s);
     const shaftEndS = Math.max(4, totalLen - headLen);
-    const wTail = 5.4 * s, wNeck = 8.8 * s, headHalfW = 16.5 * s;
+    const wTail = 6.2 * s, wNeck = 10.2 * s, headHalfW = 17.5 * s;
 
     const shaft: BezierSample[] = samples.filter((sm) => sm.s <= shaftEndS);
     const endTip = samples[samples.length - 1]!;
@@ -330,7 +331,7 @@ export class FrontlineArrowLayer {
         this.arrowG.moveTo(sm.x - sm.tx * chevLead + sm.nx * hw, sm.y - sm.ty * chevLead + sm.ny * hw)
           .lineTo(sm.x + sm.tx * chevLead, sm.y + sm.ty * chevLead)
           .lineTo(sm.x - sm.tx * chevLead - sm.nx * hw, sm.y - sm.ty * chevLead - sm.ny * hw)
-          .stroke({ width: 2.2 * s, color: 0xfff3d6, alpha: isPreview ? 0.38 : 0.62, cap: 'round', join: 'round' });
+          .stroke({ width: 1.8 * s, color: 0xfff3d6, alpha: isPreview ? 0.30 : 0.42, cap: 'round', join: 'round' });
       }
       this.arrowG.poly(poly).stroke({ width: 2.0 * s, color: 0x1c1713, alpha: isPreview ? 0.52 : 0.85, join: 'round' });
       this.arrowG.poly(poly).stroke({ width: 0.75 * s, color: 0xf7ecd4, alpha: isPreview ? 0.4 : 0.65, join: 'round' });
@@ -349,25 +350,24 @@ export class FrontlineArrowLayer {
     this.labelGroup.removeChildren().forEach((c) => c.destroy());
     if (!this.view || this.zoom < 1.05) return;
     const placed: ScreenBox[] = [...this.avoidBoxes];
-    const offW = 11 / this.zoom;
 
+    // Pass 1: Frontline labels first so every visible army frontline gets at least one crisp WenKai label
     for (const army of this.armies) {
       if (!army.frontline || army.owner !== this.playerTag) continue;
-      const chains = this.frontChainsByArmy.get(army.id) ?? [];
-      // Try chains from longest to shortest so every army gets a clean collision-free WenKai label
-      const sortedChains = [...chains].sort((a, b) => b.length - a.length);
+      const chainSamples = this.frontChainSamplesByArmy.get(army.id) ?? [];
       const text = `${army.nameZh} · ${army.brigadeIds.length}旅`;
-      for (const ch of sortedChains) {
-        if (tryPlaceCurvedStaffLabel(this.labelGroup, ch, text, army.color, this.view, placed, offW)) break;
-      }
+      tryPlaceFrontlineLabel(this.labelGroup, chainSamples, text, this.view, placed);
+    }
+
+    // Pass 2: Offensive arrow labels (light text on shaft, ink-on-parchment beside shaft if occluded)
+    for (const army of this.armies) {
+      if (!army.arrow || army.owner !== this.playerTag) continue;
       const arrowPts = this.arrowSamplesByArmy.get(army.id);
-      if (arrowPts && army.arrow) {
-        const tgtName = this.provById.get(army.arrow.targetProvId)?.nameZh ?? '';
-        if (tgtName) {
-          const arrowText = army.arrow.active ? `攻势 → ${tgtName}` : `待命 → ${tgtName}`;
-          tryPlaceCurvedStaffLabel(this.labelGroup, arrowPts, arrowText, army.color, this.view, placed, 0);
-        }
-      }
+      if (!arrowPts) continue;
+      const tgtName = this.provById.get(army.arrow.targetProvId)?.nameZh ?? '';
+      if (!tgtName) continue;
+      const arrowText = army.arrow.active ? `攻势 → ${tgtName}` : `待命 → ${tgtName}`;
+      tryPlaceArrowLabel(this.labelGroup, arrowPts, arrowText, this.view, placed);
     }
   }
 }

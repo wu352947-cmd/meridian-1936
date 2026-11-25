@@ -276,6 +276,11 @@ export class MapStage {
     this.pockets.updateLod(this.zoom);
     this.industryOverlay.updateLod(this.zoom, view);
     this.counters.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
+    this.combatBubbles.setAvoidContext(
+      this.counters.getPlacedScreenBoxes(),
+      this.counters.getPlacedCentersByProvince(),
+      this.labels.getPlacedScreenBoxes(),
+    );
     this.combatBubbles.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
     this.frontlines.updateLod(
       this.zoom,
@@ -352,11 +357,18 @@ export class MapStage {
       this.refreshLuts();
       this.counters.setDiplomacyContext(this.playerTag, combat.wars);
       this.pockets.setData(combat.pockets);
-      this.combatBubbles.setData(combat.battles, this.playerTag, selectedBattleProvId);
     } else {
       this.counters.setDiplomacyContext(this.playerTag, []);
     }
     this.counters.setData(armies, brigades, selectedBrigadeIds, selectedArmyId);
+    if (combat) {
+      this.combatBubbles.setAvoidContext(
+        this.counters.getPlacedScreenBoxes(),
+        this.counters.getPlacedCentersByProvince(),
+        this.labels.getPlacedScreenBoxes(),
+      );
+      this.combatBubbles.setData(combat.battles, this.playerTag, selectedBattleProvId);
+    }
     this.frontlines.setData(armies, brigades, selectedArmyId, this.controllerByProv, this.playerTag, pocketProvs);
     const vw = this.app.screen.width || 1440;
     const vh = this.app.screen.height || 900;
