@@ -25,6 +25,7 @@ const bufferPool: ArrayBuffer[] = [
 let timerHandle: ReturnType<typeof setTimeout> | null = null;
 let lastDispatchId = 0;
 let lastIndustryRev = -1;
+let lastArmyRev = -1;
 
 function clearTickTimer(): void {
   if (timerHandle !== null) {
@@ -61,6 +62,10 @@ function emitSnapshot(forceFull = false): void {
   const sendIndustry = forceFull || indRev !== lastIndustryRev;
   if (sendIndustry) lastIndustryRev = indRev;
 
+  const armyRev = engine.getArmyRevision();
+  const sendArmy = forceFull || armyRev !== lastArmyRev;
+  if (sendArmy) lastArmyRev = armyRev;
+
   scope.postMessage(
     {
       type: 'SNAPSHOT',
@@ -73,6 +78,7 @@ function emitSnapshot(forceFull = false): void {
             tech: engine.getTechSnapshot(),
           }
         : {}),
+      ...(sendArmy ? { army: engine.getArmySnapshot() } : {}),
     },
     [buf],
   );

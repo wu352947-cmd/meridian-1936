@@ -34,7 +34,10 @@ import {
   applyWorldSnapshot,
   autotestModeSig,
   industrySubTabSig,
+  orderToolModeSig,
   screenModeSig,
+  selectedArmyIdSig,
+  selectedBrigadeIdsSig,
   selectedCountrySig,
   simIndustrySig,
   simPlayerTagSig,
@@ -132,6 +135,46 @@ async function bootstrap(): Promise<void> {
     cancelResearch: (slotIndex) => {
       sim?.cancelResearch(slotIndex);
     },
+    setOrderToolMode: (mode) => {
+      orderToolModeSig.value = mode;
+    },
+    selectBrigades: (ids, armyId) => {
+      selectedBrigadeIdsSig.value = ids;
+      if (armyId !== undefined) selectedArmyIdSig.value = armyId;
+    },
+    queueTraining: (template, deployProvId, armyId) => {
+      sim?.queueTraining(template, deployProvId, armyId);
+    },
+    cancelTraining: (orderId) => {
+      sim?.cancelTraining(orderId);
+    },
+    createArmy: (nameZh) => {
+      sim?.createArmy(nameZh);
+    },
+    disbandArmy: (armyId) => {
+      sim?.disbandArmy(armyId);
+    },
+    assignBrigadeArmy: (brigadeId, armyId) => {
+      sim?.assignBrigadeArmy(brigadeId, armyId);
+    },
+    marchBrigades: (brigadeIds, targetProvId) => {
+      sim?.marchBrigades(brigadeIds, targetProvId);
+    },
+    unlockManualOverride: (brigadeId) => {
+      sim?.unlockManualOverride(brigadeId);
+    },
+    bindFrontline: (armyId, targetTag) => {
+      sim?.bindFrontline(armyId, targetTag);
+    },
+    clearFrontline: (armyId) => {
+      sim?.clearFrontline(armyId);
+    },
+    setOffensiveArrow: (armyId, startProvId, targetProvId, bendX, bendY) => {
+      sim?.setOffensiveArrow(armyId, startProvId, targetProvId, bendX, bendY);
+    },
+    clearOffensiveArrow: (armyId) => {
+      sim?.clearOffensiveArrow(armyId);
+    },
   };
 
   const uiRoot = document.getElementById('ui-root');
@@ -141,8 +184,8 @@ async function bootstrap(): Promise<void> {
 
   try {
     sim = new SimClient({
-      onSnapshot: (snap, dispatches, industry, governance, tech) => {
-        applyWorldSnapshot(snap, dispatches, industry, governance, tech);
+      onSnapshot: (snap, dispatches, industry, governance, tech, army) => {
+        applyWorldSnapshot(snap, dispatches, industry, governance, tech, army);
         if (industry && stage) {
           stage.updateIndustryRegions(industry.regions);
         }
@@ -174,6 +217,8 @@ async function bootstrap(): Promise<void> {
         playerArmyInferior: harness.armyInferior || undefined,
         initialLaws: harness.laws.length > 0 ? harness.laws : undefined,
         initialResearch: harness.research.length > 0 ? harness.research : undefined,
+        demoFrontline: harness.demoFrontline ?? undefined,
+        initialTraining: harness.train.length > 0 ? harness.train.map((template) => ({ template })) : undefined,
       }),
     ]);
 

@@ -3,6 +3,7 @@
  * Pure JSON-serializable payloads for replayability and desync-free simulation.
  */
 import type { SimSpeed } from './ClockCalendar';
+import type { BrigadeType } from '../data/brigadeTemplates';
 import type { GovernanceLawId, GovernanceSlot } from '../systems/governanceTypes';
 import type { BuildingType, EquipmentType } from '../systems/industryTypes';
 
@@ -20,7 +21,18 @@ export type CommandType =
   | 'TOGGLE_AUTO_TRADE'
   | 'SET_GOVERNANCE_LAW'
   | 'START_RESEARCH'
-  | 'CANCEL_RESEARCH';
+  | 'CANCEL_RESEARCH'
+  | 'QUEUE_TRAINING'
+  | 'CANCEL_TRAINING'
+  | 'CREATE_ARMY'
+  | 'DISBAND_ARMY'
+  | 'ASSIGN_BRIGADE_ARMY'
+  | 'MARCH_BRIGADES'
+  | 'UNLOCK_MANUAL_OVERRIDE'
+  | 'BIND_FRONTLINE'
+  | 'CLEAR_FRONTLINE'
+  | 'SET_OFFENSIVE_ARROW'
+  | 'CLEAR_OFFENSIVE_ARROW';
 
 export interface InitScenarioPayload {
   scenarioId: '1936';
@@ -40,6 +52,8 @@ export interface InitScenarioPayload {
   playerArmyInferior?: boolean;
   initialLaws?: Array<{ slot: GovernanceSlot; lawId: GovernanceLawId }>;
   initialResearch?: string[];
+  demoFrontline?: string;
+  initialTraining?: Array<{ template: BrigadeType; deployProvId?: number }>;
 }
 
 export interface SelectCountryPayload {
@@ -101,6 +115,59 @@ export interface CancelResearchPayload {
   slotIndex: number;
 }
 
+export interface QueueTrainingPayload {
+  template: BrigadeType;
+  deployProvId?: number;
+  armyId?: number | null;
+}
+
+export interface CancelTrainingPayload {
+  orderId: number;
+}
+
+export interface CreateArmyPayload {
+  nameZh?: string;
+}
+
+export interface DisbandArmyPayload {
+  armyId: number;
+}
+
+export interface AssignBrigadeArmyPayload {
+  brigadeId: number;
+  armyId: number | null;
+}
+
+export interface MarchBrigadesPayload {
+  brigadeIds: number[];
+  targetProvId: number;
+}
+
+export interface UnlockManualOverridePayload {
+  brigadeId: number;
+}
+
+export interface BindFrontlinePayload {
+  armyId: number;
+  targetTag: string;
+}
+
+export interface ClearFrontlinePayload {
+  armyId: number;
+}
+
+export interface SetOffensiveArrowPayload {
+  armyId: number;
+  startProvId?: number | null;
+  targetProvId: number;
+  bendOffsetX?: number;
+  bendOffsetY?: number;
+}
+
+export interface ClearOffensiveArrowPayload {
+  armyId: number;
+}
+
 export type GameCommandPayload =
   | InitScenarioPayload
   | SelectCountryPayload
@@ -115,7 +182,18 @@ export type GameCommandPayload =
   | ToggleAutoTradePayload
   | SetGovernanceLawPayload
   | StartResearchPayload
-  | CancelResearchPayload;
+  | CancelResearchPayload
+  | QueueTrainingPayload
+  | CancelTrainingPayload
+  | CreateArmyPayload
+  | DisbandArmyPayload
+  | AssignBrigadeArmyPayload
+  | MarchBrigadesPayload
+  | UnlockManualOverridePayload
+  | BindFrontlinePayload
+  | ClearFrontlinePayload
+  | SetOffensiveArrowPayload
+  | ClearOffensiveArrowPayload;
 
 export interface GameCommand<T extends CommandType = CommandType> {
   tick: number;

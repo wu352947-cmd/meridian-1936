@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { TICKS_PER_DAY } from '../src/sim/core/ClockCalendar';
+import { SimEngine } from '../src/sim/core/SimEngine';
 import {
   BRIGADE_TEMPLATES,
   BRIGADE_TYPE_ORDER,
@@ -321,5 +323,68 @@ describe('Batch 05 Land Brigades, Training, A* Marching, Frontlines & Orders', (
     expect(arrived).toBe(true);
     // Once arrived, manualOverride clears cleanly so army AI may resume control on subsequent ticks
     expect(locked.manualOverride).toBe(false);
+  });
+
+  it('6. replaces deployed manpower placeholder, enforces extensive +10% train duration, and produces identical seeded state hashes', () => {
+    const runOnce = () => {
+      const eng = new SimEngine(19360505, 'GER');
+      eng.resetScenario({
+        scenarioId: '1936',
+        countryTag: 'GER',
+        seed: 19360505,
+        playerAp: 200,
+        playerMobilizationPermille: 600,
+      });
+
+      // Real deployed manpower replaces opening brigades * 10000 placeholder
+      const army0 = eng.getArmySnapshot('GER');
+      const gerBrigs0 = army0.brigades.filter((b) => b.owner === 'GER');
+      const expectedRealMp = gerBrigs0.reduce((s, b) => s + BRIGADE_TEMPLATES[b.template].manpower, 0);
+      expect(expectedRealMp).not.toBe(gerBrigs0.length * 10_000);
+      expect(eng.getGovernanceSnapshot('GER').manpower.deployed).toBe(expectedRealMp);
+      expect(eng.getGovernanceSnapshot('GER').manpower.casualties).toBe(0);
+
+      // Switch to extensive conscription (+10% training time -> ARM 60d becomes 66d, INF 35d becomes 39d)
+      eng.applyImmediate({ tick: 0, actorTag: 'GER', type: 'SET_GOVERNANCE_LAW', payload: { slot: 'conscription', lawId: 'extensive' } });
+      const berlinId = getCapitalProvince('GER')!.id;
+      const breslauId = getOwnerProvinces('GER').find((p) => p.nameZh === '布雷斯劳')!.id;
+
+      // Queue INF + ARM training & bind frontline & march a manual brigade
+      eng.applyImmediate({ tick: 0, actorTag: 'GER', type: 'QUEUE_TRAINING', payload: { template: 'INF', deployProvId: breslauId } });
+      eng.applyImmediate({ tick: 0, actorTag: 'GER', type: 'QUEUE_TRAINING', payload: { template: 'ARM', deployProvId: berlinId } });
+      const gerArmy1 = eng.getArmySnapshot('GER').armies.find((a) => a.owner === 'GER')!;
+      eng.applyImmediate({ tick: 0, actorTag: 'GER', type: 'BIND_FRONTLINE', payload: { armyId: gerArmy1.id, targetTag: 'POL' } });
+      eng.applyImmediate({ tick: 0, actorTag: 'GER', type: 'MARCH_BRIGADES', payload: { brigadeIds: [gerArmy1.brigadeIds[0]!], targetProvId: berlinId } });
+
+      // After 35 days under extensive conscription (+10%), INF (38.5 -> 39d) must NOT be deployed yet!
+      eng.stepMany(35 * TICKS_PER_DAY);
+      expect(eng.getArmySnapshot('GER').trainingQueue.length).toBe(2);
+
+      // After 4 more days (day 39), INF completes & deploys to Breslau; ARM (66d) still training
+      eng.stepMany(4 * TICKS_PER_DAY);
+      const day39Army = eng.getArmySnapshot('GER');
+      expect(day39Army.trainingQueue.length).toBe(1);
+      expect(day39Army.brigades.filter((b) => b.owner === 'GER').length).toBe(gerBrigs0.length + 1);
+      expect(eng.getGovernanceSnapshot('GER').manpower.deployed).toBe(expectedRealMp + 10_000);
+
+      // After 27 more days (day 66), ARM completes & deploys too
+      eng.stepMany(27 * TICKS_PER_DAY);
+      const day66Army = eng.getArmySnapshot('GER');
+      expect(day66Army.trainingQueue.length).toBe(0);
+      expect(day66Army.brigades.filter((b) => b.owner === 'GER').length).toBe(gerBrigs0.length + 2);
+      expect(eng.getGovernanceSnapshot('GER').manpower.deployed).toBe(expectedRealMp + 18_000);
+
+      return {
+        hash: eng.computeStateHashHex(),
+        army: day66Army,
+        gov: eng.getGovernanceSnapshot('GER'),
+      };
+    };
+
+    const a = runOnce();
+    const b = runOnce();
+    expect(a.hash).toBe(b.hash);
+    expect(a.army).toEqual(b.army);
+    expect(a.gov).toEqual(b.gov);
   });
 });

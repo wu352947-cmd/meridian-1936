@@ -6,7 +6,9 @@ import type { SimSpeed } from '../../sim/core/ClockCalendar';
 import type { GameCommand, InitScenarioPayload } from '../../sim/core/GameCommand';
 import { decodeSnapshot, type WorldSnapshot } from '../../sim/core/SnapshotCodec';
 import type { TickerDispatch } from '../../sim/core/SimEngine';
+import type { BrigadeType } from '../../sim/data/brigadeTemplates';
 import { PLAYABLE_TAG_LIST } from '../../sim/data/nations1936';
+import type { ArmySystemSnapshot } from '../../sim/systems/armyTypes';
 import type { GovernanceLawId, GovernanceSlot, GovernanceSnapshot } from '../../sim/systems/governanceTypes';
 import type { BuildingType, EquipmentType, IndustrySnapshot } from '../../sim/systems/industryTypes';
 import type { TechSnapshot } from '../../sim/systems/techTypes';
@@ -19,6 +21,7 @@ export interface SimClientHandlers {
     industry?: IndustrySnapshot,
     governance?: GovernanceSnapshot,
     tech?: TechSnapshot,
+    army?: ArmySystemSnapshot,
   ) => void;
 }
 
@@ -56,7 +59,7 @@ export class SimClient {
         const ret: MainToWorkerMessage = { type: 'RETURN_BUFFER', buffer: msg.buffer };
         this.worker.postMessage(ret, [msg.buffer]);
 
-        handlers.onSnapshot(snap, msg.dispatches, msg.industry, msg.governance, msg.tech);
+        handlers.onSnapshot(snap, msg.dispatches, msg.industry, msg.governance, msg.tech, msg.army);
 
         if (this.snapshotWaiters.length > 0) {
           const waiters = this.snapshotWaiters.splice(0);
@@ -141,6 +144,56 @@ export class SimClient {
 
   cancelResearch(slotIndex: number): void {
     this.sendCommand('CANCEL_RESEARCH', { slotIndex });
+  }
+
+  queueTraining(template: BrigadeType, deployProvId?: number, armyId?: number | null): void {
+    this.sendCommand('QUEUE_TRAINING', { template, deployProvId, armyId });
+  }
+
+  cancelTraining(orderId: number): void {
+    this.sendCommand('CANCEL_TRAINING', { orderId });
+  }
+
+  createArmy(nameZh?: string): void {
+    this.sendCommand('CREATE_ARMY', { nameZh });
+  }
+
+  disbandArmy(armyId: number): void {
+    this.sendCommand('DISBAND_ARMY', { armyId });
+  }
+
+  assignBrigadeArmy(brigadeId: number, armyId: number | null): void {
+    this.sendCommand('ASSIGN_BRIGADE_ARMY', { brigadeId, armyId });
+  }
+
+  marchBrigades(brigadeIds: number[], targetProvId: number): void {
+    this.sendCommand('MARCH_BRIGADES', { brigadeIds, targetProvId });
+  }
+
+  unlockManualOverride(brigadeId: number): void {
+    this.sendCommand('UNLOCK_MANUAL_OVERRIDE', { brigadeId });
+  }
+
+  bindFrontline(armyId: number, targetTag: string): void {
+    this.sendCommand('BIND_FRONTLINE', { armyId, targetTag });
+  }
+
+  clearFrontline(armyId: number): void {
+    this.sendCommand('CLEAR_FRONTLINE', { armyId });
+  }
+
+  setOffensiveArrow(
+    armyId: number,
+    startProvId: number | null,
+    targetProvId: number,
+    bendOffsetX?: number,
+    bendOffsetY?: number,
+  ): void {
+    this.sendCommand('SET_OFFENSIVE_ARROW', { armyId, startProvId, targetProvId, bendOffsetX, bendOffsetY });
+  }
+
+  clearOffensiveArrow(armyId: number): void {
+    this.sendCommand('CLEAR_OFFENSIVE_ARROW', { armyId });
   }
 
   stepOnce(): void {

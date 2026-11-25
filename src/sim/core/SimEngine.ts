@@ -6,25 +6,39 @@ import { dateStringToTick, formatDateIso, TICKS_PER_DAY, tickToDate, type SimSpe
 import { clampInt, FIXED_SCALE, mulFixed } from './FixedMath';
 import {
   CommandQueue,
+  type AssignBrigadeArmyPayload,
+  type BindFrontlinePayload,
   type CancelConstructionPayload,
   type CancelResearchPayload,
+  type CancelTrainingPayload,
+  type ClearFrontlinePayload,
+  type ClearOffensiveArrowPayload,
+  type CreateArmyPayload,
+  type DisbandArmyPayload,
   type GameCommand,
   type InitScenarioPayload,
+  type MarchBrigadesPayload,
   type QueueConstructionPayload,
+  type QueueTrainingPayload,
   type ReorderConstructionPayload,
   type SelectCountryPayload,
   type SetDatePayload,
   type SetGovernanceLawPayload,
   type SetLineFactoriesPayload,
+  type SetOffensiveArrowPayload,
   type SetSpeedPayload,
   type StartResearchPayload,
   type SwitchProductionLinePayload,
   type ToggleAutoTradePayload,
   type TogglePausePayload,
+  type UnlockManualOverridePayload,
 } from './GameCommand';
 import { SeededRng } from './SeededRng';
 import type { SimNationSnapshot, WorldSnapshot } from './SnapshotCodec';
+import { BRIGADE_TEMPLATES } from '../data/brigadeTemplates';
 import { ALL_PLAYABLE_NATIONS_1936, isPlayableTag } from '../data/nations1936';
+import { ArmySystem } from '../systems/armySystem';
+import type { ArmySystemSnapshot } from '../systems/armyTypes';
 import { GovernanceSystem } from '../systems/governanceSystem';
 import type { GovernanceSnapshot } from '../systems/governanceTypes';
 import { IndustrySystem, type IndustryLawTechMods } from '../systems/industrySystem';
@@ -61,9 +75,11 @@ export class SimEngine {
   private readonly governance = new GovernanceSystem();
   private readonly manpower = new ManpowerSystem();
   private readonly tech = new TechSystem();
+  private readonly army = new ArmySystem();
   private dispatches: TickerDispatch[] = [];
   private nextDispatchId = 1;
   private industryRevision = 1;
+  private armyRevision = 1;
 
   constructor(seed = 19360101, playerTag = 'GER') {
     this.seed = seed >>> 0;
@@ -146,6 +162,11 @@ export class SimEngine {
       }
     }
 
+    this.army.reset();
+    if (opts.demoFrontline) {
+      this.army.applyDemoFrontline(opts.demoFrontline);
+    }
+
     this.syncNationsFromSystems();
     this.pushDispatch('info', '1936 欧洲参谋部总图就绪，等待签批指令。', this.playerTag);
 
@@ -160,8 +181,24 @@ export class SimEngine {
         this.tech.startResearch(this.playerTag, techId, yr, this.getCombinedModifiers(this.playerTag).research_speed);
       }
     }
+    if (opts.initialTraining && opts.initialTraining.length > 0) {
+      const trainMod = this.getCombinedModifiers(this.playerTag).training_time;
+      const defaultArmy = this.army.getArmiesFor(this.playerTag)[0]?.id ?? null;
+      for (const item of opts.initialTraining) {
+        this.army.queueTraining(
+          this.playerTag,
+          item.template,
+          item.deployProvId,
+          defaultArmy,
+          trainMod,
+          this.getTrainingAdapter(),
+        );
+      }
+      this.syncNationsFromSystems();
+    }
 
     this.industryRevision += 1;
+    this.armyRevision += 1;
 
     if (opts.startDate) {
       const targetTick = dateStringToTick(opts.startDate);
@@ -189,6 +226,10 @@ export class SimEngine {
 
     this.tick += 1;
     this.seqNo += 1;
+
+    // Batch 05: 6-hour tick land movement & frontline dispatch
+    this.army.stepTick((tag) => this.getCombinedModifiers(tag).army_speed);
+    this.armyRevision += 1;
 
     // Daily boundary (00:00 each day)
     if (this.tick % TICKS_PER_DAY === 0) {
@@ -236,12 +277,22 @@ export class SimEngine {
 
     // Batch 03 daily industrial production, construction & auto-trade settlement
     const completed = this.industry.stepDaily(this.getCohesionMap());
+    // Batch 05 daily brigade training progression & deployment
+    const deployedEvents = this.army.stepDaily((tag) => this.getCombinedModifiers(tag).training_time);
     this.syncNationsFromSystems();
     this.industryRevision += 1;
+    this.armyRevision += 1;
     for (const ev of completed) {
       if (ev.tag === this.playerTag) {
         const bName = BUILDING_SPECS[ev.building].nameZh;
         this.pushDispatch('info', `${ev.regionNameZh}竣工 1 座${bName}`, ev.tag);
+      }
+    }
+    for (const dev of deployedEvents) {
+      if (dev.owner === this.playerTag) {
+        const tName = BRIGADE_TEMPLATES[dev.template].nameZh;
+        const pct = Math.round(dev.strengthPermille / 10);
+        this.pushDispatch('info', `新编${tName}结训部署至${dev.provinceNameZh}（满编 ${pct}%）`, dev.owner);
       }
     }
 
@@ -332,8 +383,24 @@ export class SimEngine {
     return map;
   }
 
+  private getTrainingAdapter() {
+    return {
+      getAvailableManpower: (tag: string) => this.manpower.getAvailableManpower(tag),
+      consumeEquipment: (tag: string, eqType: Parameters<IndustrySystem['consumeEquipment']>[1], units: number) =>
+        this.industry.consumeEquipment(tag, eqType, units),
+      refundEquipment: (tag: string, eqType: Parameters<IndustrySystem['refundEquipment']>[1], units: number) =>
+        this.industry.refundEquipment(tag, eqType, units),
+    };
+  }
+
   private syncNationsFromSystems(): void {
     for (const n of this.nations) {
+      this.manpower.setDeployedAndTraining(
+        n.tag,
+        this.army.getDeployedManpower(n.tag),
+        this.army.getInTrainingManpower(n.tag),
+      );
+      n.brigades = this.army.getBrigadeCount(n.tag);
       const s = this.industry.getNationSummary(n.tag);
       if (s) {
         n.civ = s.civ;
@@ -363,6 +430,7 @@ export class SimEngine {
         if (isPlayableTag(tag)) {
           this.playerTag = tag;
           this.industryRevision += 1;
+          this.armyRevision += 1;
           this.pushDispatch('info', `统帅部执掌切换至 ${tag}，参谋卷宗已同步更新。`, tag);
         }
         break;
@@ -475,6 +543,94 @@ export class SimEngine {
         }
         break;
       }
+      case 'QUEUE_TRAINING': {
+        const { template, deployProvId, armyId } = cmd.payload as QueueTrainingPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        const trainMod = this.getCombinedModifiers(actor).training_time;
+        const defaultArmy = armyId !== undefined ? armyId : (this.army.getArmiesFor(actor)[0]?.id ?? null);
+        if (this.army.queueTraining(actor, template, deployProvId, defaultArmy, trainMod, this.getTrainingAdapter())) {
+          this.syncNationsFromSystems();
+          this.industryRevision += 1;
+          this.armyRevision += 1;
+        }
+        break;
+      }
+      case 'CANCEL_TRAINING': {
+        const { orderId } = cmd.payload as CancelTrainingPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.army.cancelTraining(actor, orderId, this.getTrainingAdapter())) {
+          this.syncNationsFromSystems();
+          this.industryRevision += 1;
+          this.armyRevision += 1;
+        }
+        break;
+      }
+      case 'CREATE_ARMY': {
+        const { nameZh } = cmd.payload as CreateArmyPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        this.army.createArmy(actor, nameZh);
+        this.armyRevision += 1;
+        break;
+      }
+      case 'DISBAND_ARMY': {
+        const { armyId } = cmd.payload as DisbandArmyPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.army.disbandArmy(actor, armyId)) this.armyRevision += 1;
+        break;
+      }
+      case 'ASSIGN_BRIGADE_ARMY': {
+        const { brigadeId, armyId } = cmd.payload as AssignBrigadeArmyPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.army.assignBrigadeToArmy(actor, brigadeId, armyId)) this.armyRevision += 1;
+        break;
+      }
+      case 'MARCH_BRIGADES': {
+        const { brigadeIds, targetProvId } = cmd.payload as MarchBrigadesPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        const spdMod = this.getCombinedModifiers(actor).army_speed;
+        if (this.army.marchBrigades(actor, brigadeIds, targetProvId, spdMod) > 0) {
+          this.armyRevision += 1;
+        }
+        break;
+      }
+      case 'UNLOCK_MANUAL_OVERRIDE': {
+        const { brigadeId } = cmd.payload as UnlockManualOverridePayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.army.unlockManualOverride(actor, brigadeId)) this.armyRevision += 1;
+        break;
+      }
+      case 'BIND_FRONTLINE': {
+        const { armyId, targetTag } = cmd.payload as BindFrontlinePayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        const spdMod = this.getCombinedModifiers(actor).army_speed;
+        if (this.army.bindFrontline(actor, armyId, targetTag, spdMod)) {
+          this.armyRevision += 1;
+          if (actor === this.playerTag) {
+            this.pushDispatch('info', `集团军已绑定对 ${targetTag} 连续战线，部队开始按省均摊部署。`, actor);
+          }
+        }
+        break;
+      }
+      case 'CLEAR_FRONTLINE': {
+        const { armyId } = cmd.payload as ClearFrontlinePayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.army.clearFrontline(actor, armyId)) this.armyRevision += 1;
+        break;
+      }
+      case 'SET_OFFENSIVE_ARROW': {
+        const { armyId, startProvId, targetProvId, bendOffsetX, bendOffsetY } = cmd.payload as SetOffensiveArrowPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.army.setOffensiveArrow(actor, armyId, startProvId ?? null, targetProvId, bendOffsetX, bendOffsetY)) {
+          this.armyRevision += 1;
+        }
+        break;
+      }
+      case 'CLEAR_OFFENSIVE_ARROW': {
+        const { armyId } = cmd.payload as ClearOffensiveArrowPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.army.clearOffensiveArrow(actor, armyId)) this.armyRevision += 1;
+        break;
+      }
     }
   }
 
@@ -522,6 +678,7 @@ export class SimEngine {
     this.governance.mixHash(mix);
     this.manpower.mixHash(mix);
     this.tech.mixHash(mix);
+    this.army.mixHash(mix);
     return h >>> 0;
   }
 
@@ -552,6 +709,18 @@ export class SimEngine {
 
   getIndustryRevision(): number {
     return this.industryRevision;
+  }
+
+  getArmyRevision(): number {
+    return this.armyRevision;
+  }
+
+  getArmySnapshot(tag = this.playerTag): ArmySystemSnapshot {
+    return this.army.getSnapshotFor(
+      tag,
+      (t) => this.getCombinedModifiers(t).army_speed,
+      this.getCombinedModifiers(tag).training_time,
+    );
   }
 
   getIndustrySnapshot(tag = this.playerTag): IndustrySnapshot {

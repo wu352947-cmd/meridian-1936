@@ -4,6 +4,7 @@
  */
 import type { GameCommand, InitScenarioPayload } from './core/GameCommand';
 import type { TickerDispatch } from './core/SimEngine';
+import type { ArmySystemSnapshot } from './systems/armyTypes';
 import type { GovernanceSnapshot } from './systems/governanceTypes';
 import type { IndustrySnapshot } from './systems/industryTypes';
 import type { TechSnapshot } from './systems/techTypes';
@@ -23,4 +24,5 @@ export type WorkerToMainMessage =
       industry?: IndustrySnapshot;
       governance?: GovernanceSnapshot;
       tech?: TechSnapshot;
+      army?: ArmySystemSnapshot;
     };

@@ -1,4 +1,5 @@
 import type { SimSpeed } from '../sim/core/ClockCalendar';
+import { BRIGADE_TEMPLATES, type BrigadeType } from '../sim/data/brigadeTemplates';
 import {
   CONSCRIPTION_LAW_SPECS,
   ECONOMY_LAW_SPECS,
@@ -35,6 +36,8 @@ export interface UrlHarnessParams {
   armyInferior: boolean;
   laws: Array<{ slot: GovernanceSlot; lawId: GovernanceLawId }>;
   research: string[];
+  demoFrontline: string | null;
+  train: BrigadeType[];
   mapmode: MapMode;
   cam: { x: number; y: number; zoom: number } | null;
   selectProv: number | null;
@@ -193,6 +196,18 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     }
   }
 
+  const rawDemoFrontline = sp.get('demoFrontline')?.trim() ?? '';
+  const demoFrontline = rawDemoFrontline ? rawDemoFrontline.toUpperCase() : null;
+
+  const train: BrigadeType[] = [];
+  const rawTrain = sp.get('train');
+  if (rawTrain) {
+    for (const part of rawTrain.split(',')) {
+      const bt = part.trim().toUpperCase() as BrigadeType;
+      if (bt in BRIGADE_TEMPLATES) train.push(bt);
+    }
+  }
+
   return {
     autotest,
     screen,
@@ -215,6 +230,8 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     armyInferior: isFlag('armyInferior'),
     laws,
     research,
+    demoFrontline,
+    train,
     mapmode,
     cam,
     selectProv: parseIntOrNull(sp.get('selectProv')),
