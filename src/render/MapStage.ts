@@ -11,9 +11,11 @@ import type { EuropeMapMeta, MapMode, ProvinceRecord } from '../types/map';
 import type { LoadedMapBundle } from './loadMapData';
 import { BorderMeshBuilder } from './BorderMeshBuilder';
 import { CurvedLabelLayer } from './CurvedLabelLayer';
+import { IndustryOverlayLayer } from './IndustryOverlayLayer';
 import { TerrainDetailLayer } from './TerrainDetailLayer';
 import { buildOwnerIndexMap, fillProvinceLuts } from './lutPalette';
 import { createProvinceLutShader } from './shaders/provinceLut';
+import type { RegionDynamicSnap } from '../sim/systems/industryTypes';
 
 export interface MapStageCallbacks {
   onHoverProvince: (prov: ProvinceRecord | null) => void;
@@ -48,12 +50,14 @@ export class MapStage {
   private readonly terrainDetails: TerrainDetailLayer;
   private readonly borders: BorderMeshBuilder;
   private readonly labels: CurvedLabelLayer;
+  private readonly industryOverlay: IndustryOverlayLayer;
   private readonly cbs: MapStageCallbacks;
 
   private mapMode: MapMode = 'political';
   private selectedProvId: number | null = null;
   private selectedOwner: string | null = null;
   private hoveredProvId: number | null = null;
+  private regionsById = new Map<number, RegionDynamicSnap>();
 
   // Camera state: world point centered in viewport + zoom scale
   private camX = 1880;
@@ -140,8 +144,9 @@ export class MapStage {
     this.terrainDetails = new TerrainDetailLayer(this.meta, this.pickGrid, this.pickW, this.pickH);
     this.borders = new BorderMeshBuilder(this.meta, bundle.topology, this.pickGrid, this.pickW, this.pickH);
     this.labels = new CurvedLabelLayer(this.meta);
+    this.industryOverlay = new IndustryOverlayLayer();
 
-    this.world.addChild(mapMesh, this.terrainDetails.root, this.borders.root, this.labels.root);
+    this.world.addChild(mapMesh, this.terrainDetails.root, this.borders.root, this.labels.root, this.industryOverlay.root);
     this.app.stage.addChild(this.world);
 
     this.refreshLuts();
@@ -196,14 +201,16 @@ export class MapStage {
     this.lutShader.resources.mapUniforms.uniforms.uZoom = this.zoom;
     this.terrainDetails.updateLod(this.zoom);
     this.borders.updateLod(this.zoom);
-    this.labels.updateLod(this.zoom, {
+    const view = {
       minX: this.camX - halfW,
       minY: this.camY - halfH,
       maxX: this.camX + halfW,
       maxY: this.camY + halfH,
       vw,
       vh,
-    });
+    };
+    this.labels.updateLod(this.zoom, view);
+    this.industryOverlay.updateLod(this.zoom, view);
     this.cbs.onCameraChange({ x: this.camX, y: this.camY, zoom: this.zoom });
   }
 
@@ -223,6 +230,13 @@ export class MapStage {
   setMapMode(mode: MapMode): void {
     this.mapMode = mode;
     this.lutShader.resources.mapUniforms.uniforms.uMode = MODE_NUM[mode];
+    this.industryOverlay.setMapMode(mode);
+    this.refreshLuts();
+  }
+
+  updateIndustryRegions(regions: readonly RegionDynamicSnap[]): void {
+    this.regionsById = new Map(regions.map((r) => [r.id, r]));
+    this.industryOverlay.rebuildFromRegions(regions);
     this.refreshLuts();
   }
 
@@ -283,6 +297,7 @@ export class MapStage {
       selectedProvId: this.selectedProvId,
       selectedOwner: this.selectedOwner,
       hoveredProvId: this.hoveredProvId,
+      regionsById: this.regionsById,
       primaryBuf: this.primaryBuf,
       secondaryBuf: this.secondaryBuf,
     });

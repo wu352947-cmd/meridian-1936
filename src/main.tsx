@@ -4,6 +4,7 @@ import './ui/styles/dossier.css';
 import './ui/styles/dossierTray.css';
 import './ui/styles/hudTop.css';
 import './ui/styles/hudDock.css';
+import './ui/styles/industryDrawer.css';
 
 import { render } from 'preact';
 import { loadMeridianFonts } from './assets/loadFonts';
@@ -11,6 +12,7 @@ import { parseUrlHarness } from './debug/urlHarness';
 import { loadEurope1936Map } from './render/loadMapData';
 import { MapStage } from './render/MapStage';
 import { isPlayableTag } from './sim/data/nations1936';
+import { getRegionDef } from './sim/data/regions1936';
 import type { MapMode } from './types/map';
 import { AppShell } from './ui/AppShell';
 import {
@@ -28,8 +30,10 @@ import {
   activeDrawerSig,
   applyWorldSnapshot,
   autotestModeSig,
+  industrySubTabSig,
   screenModeSig,
   selectedCountrySig,
+  simIndustrySig,
   simPlayerTagSig,
   simSeedSig,
   simTickSig,
@@ -47,6 +51,7 @@ async function bootstrap(): Promise<void> {
   selectedCountrySig.value = initialTag;
   simSeedSig.value = harness.seed;
   activeDrawerSig.value = harness.panel;
+  if (harness.subtab) industrySubTabSig.value = harness.subtab;
 
   const actions: AppActions = {
     setMode: (mode: MapMode) => {
@@ -59,6 +64,12 @@ async function bootstrap(): Promise<void> {
     clearSelection: () => stage?.selectProvince(null),
     focusCountry: (tag: string, pan = false) => {
       stage?.highlightCountry(tag, pan, 1.35);
+    },
+    focusRegion: (regionId: number) => {
+      const def = getRegionDef(regionId);
+      if (!def || !stage) return;
+      stage.selectProvince(def.hubProvId);
+      stage.setCamera(def.cx + 120, def.cy, Math.max(stage.getCamera().zoom, 1.45));
     },
     previewCountry: (tag: string, pan = false) => {
       if (!isPlayableTag(tag)) return;
@@ -91,6 +102,24 @@ async function bootstrap(): Promise<void> {
     toggleDrawer: (tab) => {
       activeDrawerSig.value = tab;
     },
+    queueConstruction: (regionId, building) => {
+      sim?.queueConstruction(regionId, building);
+    },
+    cancelConstruction: (projectId) => {
+      sim?.cancelConstruction(projectId);
+    },
+    reorderConstruction: (projectId, direction) => {
+      sim?.reorderConstruction(projectId, direction);
+    },
+    setLineFactories: (eqType, factories) => {
+      sim?.setLineFactories(eqType, factories);
+    },
+    switchProductionLine: (fromType, toType, count) => {
+      sim?.switchProductionLine(fromType, toType, count);
+    },
+    toggleAutoTrade: (enabled) => {
+      sim?.toggleAutoTrade(enabled);
+    },
   };
 
   const uiRoot = document.getElementById('ui-root');
@@ -100,7 +129,12 @@ async function bootstrap(): Promise<void> {
 
   try {
     sim = new SimClient({
-      onSnapshot: (snap, dispatches) => applyWorldSnapshot(snap, dispatches),
+      onSnapshot: (snap, dispatches, industry) => {
+        applyWorldSnapshot(snap, dispatches, industry);
+        if (industry && stage) {
+          stage.updateIndustryRegions(industry.regions);
+        }
+      },
     });
 
     const initialPaused =
@@ -117,6 +151,8 @@ async function bootstrap(): Promise<void> {
         startDate: harness.date ?? undefined,
         paused: initialPaused,
         speed: initialSpeed,
+        autoTrade: harness.autotrade ?? undefined,
+        initialQueue: harness.queue.length > 0 ? harness.queue : undefined,
       }),
     ]);
 
@@ -143,6 +179,10 @@ async function bootstrap(): Promise<void> {
       },
     });
 
+    if (simIndustrySig.value) {
+      stage.updateIndustryRegions(simIndustrySig.value.regions);
+    }
+
     actions.setMode(harness.mapmode);
     if (harness.cam) {
       stage.setCamera(harness.cam.x, harness.cam.y, harness.cam.zoom);
@@ -150,6 +190,9 @@ async function bootstrap(): Promise<void> {
       // Frame continental Europe cleanly beside the right dossier folder
       stage.setCamera(1880, 1615, 0.50);
       stage.highlightCountry(initialTag, false);
+    } else if (harness.mapmode === 'industry' && initialTag === 'GER') {
+      // Frame Ruhr, Rhine, Berlin & Silesia cleanly to the left of the 380px F3 drawer
+      stage.setCamera(1740, 1595, 1.32);
     }
 
     if (harness.selectProv !== null) {

@@ -1,4 +1,6 @@
 import { COUNTRIES_1936, TERRAIN_INFO } from '../data/countries1936';
+import { getRegionDefByProvince } from '../sim/data/regions1936';
+import type { RegionDynamicSnap } from '../sim/systems/industryTypes';
 import type { MapMode, ProvinceRecord } from '../types/map';
 
 export function hexToRgb(hex: string): [number, number, number] {
@@ -18,10 +20,16 @@ export function buildOwnerIndexMap(provinces: ProvinceRecord[]): Map<string, num
   return map;
 }
 
-/** Industry choropleth color scale (low parchment -> amber -> warm brass-terracotta). */
-function industryColor(ind: number, vp: number): [number, number, number] {
-  const score = Math.min(1, (ind * 1.15 + vp * 0.25) / 16);
-  // 4-stop warm archival heat ramp
+/** Industry choropleth color scale by live Region factory density (parchment -> gold -> copper -> foundry). */
+function regionIndustryColor(reg: RegionDynamicSnap | null, fallbackInd: number, vp: number): [number, number, number] {
+  if (reg) {
+    const facs = reg.civ + reg.mil + reg.doc + reg.synth;
+    if (facs <= 1) return [218, 210, 193];
+    if (facs <= 3) return [196, 174, 128];
+    if (facs <= 5) return [184, 126, 74];
+    return [158, 76, 58];
+  }
+  const score = Math.min(1, (fallbackInd * 1.15 + vp * 0.25) / 16);
   if (score < 0.22) return [218, 210, 193];
   if (score < 0.48) return [196, 174, 128];
   if (score < 0.74) return [184, 126, 74];
@@ -87,6 +95,7 @@ export interface LutUpdateOptions {
   selectedProvId: number | null;
   selectedOwner: string | null;
   hoveredProvId: number | null;
+  regionsById?: ReadonlyMap<number, RegionDynamicSnap>;
   primaryBuf: Uint8Array;
   secondaryBuf: Uint8Array;
 }
@@ -94,10 +103,10 @@ export interface LutUpdateOptions {
 /**
  * Fill the 4096x1 RGBA primary and secondary LUT buffers in O(N) (<0.1ms).
  * primary:   RGB = fill color, A = fill strength hint (255 = land, 0 = sea)
- * secondary: R = ownerIndex (0..255), G = selectedCountry (0/255), B = selectedProv (0/255), A = hoveredProv (0/255)
+ * secondary: R = ownerIndex (0..255), G = bit7(128)=selectedCountry | bit6(64)=constructing, B = selectedProv, A = hoveredProv
  */
 export function fillProvinceLuts(opts: LutUpdateOptions): void {
-  const { provinces, ownerIdx, mode, selectedProvId, selectedOwner, hoveredProvId, primaryBuf, secondaryBuf } = opts;
+  const { provinces, ownerIdx, mode, selectedProvId, selectedOwner, hoveredProvId, regionsById, primaryBuf, secondaryBuf } = opts;
   primaryBuf.fill(0);
   secondaryBuf.fill(0);
 
@@ -114,6 +123,9 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
       secondaryBuf[off + 3] = p.id === hoveredProvId ? 255 : 0;
       continue;
     }
+
+    const regDef = getRegionDefByProvince(p.id);
+    const regDyn = regDef && regionsById ? (regionsById.get(regDef.id) ?? null) : null;
 
     let rgb: [number, number, number];
     if (mode === 'political') {
@@ -134,7 +146,7 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
     } else if (mode === 'air_sea') {
       rgb = airSeaPreviewColor(p);
     } else {
-      rgb = industryColor(p.industry, p.vp);
+      rgb = regionIndustryColor(regDyn, p.industry, p.vp);
     }
 
     primaryBuf[off] = rgb[0];
@@ -142,8 +154,10 @@ export function fillProvinceLuts(opts: LutUpdateOptions): void {
     primaryBuf[off + 2] = rgb[2];
     primaryBuf[off + 3] = 255;
 
+    const selFlag = selectedOwner && p.owner === selectedOwner ? 128 : 0;
+    const buildFlag = regDyn && regDyn.activeBuilding ? 64 : 0;
     secondaryBuf[off] = ownerIdx.get(p.owner) ?? 254;
-    secondaryBuf[off + 1] = selectedOwner && p.owner === selectedOwner ? 255 : 0;
+    secondaryBuf[off + 1] = selFlag | buildFlag;
     secondaryBuf[off + 2] = p.id === selectedProvId ? 255 : 0;
     secondaryBuf[off + 3] = p.id === hoveredProvId ? 255 : 0;
   }

@@ -24,6 +24,7 @@ const bufferPool: ArrayBuffer[] = [
 
 let timerHandle: ReturnType<typeof setTimeout> | null = null;
 let lastDispatchId = 0;
+let lastIndustryRev = -1;
 
 function clearTickTimer(): void {
   if (timerHandle !== null) {
@@ -46,21 +47,26 @@ function scheduleNextTick(): void {
   }, interval);
 }
 
-function emitSnapshot(forceDispatches = false): void {
+function emitSnapshot(forceFull = false): void {
   const buf = bufferPool.pop() ?? new ArrayBuffer(SNAPSHOT_BYTES);
   const snap = engine.getSnapshot();
   encodeSnapshot(snap, buf);
 
   const dispatches = engine.getDispatches();
   const topId = dispatches[0]?.id ?? 0;
-  const sendDispatches = forceDispatches || topId !== lastDispatchId;
+  const sendDispatches = forceFull || topId !== lastDispatchId;
   if (sendDispatches) lastDispatchId = topId;
+
+  const indRev = engine.getIndustryRevision();
+  const sendIndustry = forceFull || indRev !== lastIndustryRev;
+  if (sendIndustry) lastIndustryRev = indRev;
 
   scope.postMessage(
     {
       type: 'SNAPSHOT',
       buffer: buf,
       ...(sendDispatches ? { dispatches } : {}),
+      ...(sendIndustry ? { industry: engine.getIndustrySnapshot() } : {}),
     },
     [buf],
   );

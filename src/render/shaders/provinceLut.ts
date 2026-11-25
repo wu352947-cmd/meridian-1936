@@ -79,7 +79,9 @@ void main() {
 
   bool isSea = prim.a < 0.5;
   float myOwner = sec.r;
-  bool isSelCountry = sec.g > 0.5;
+  float gByte = floor(sec.g * 255.0 + 0.5);
+  bool isSelCountry = gByte >= 127.5;
+  bool isConstructing = mod(gByte, 128.0) >= 60.0;
   bool isSelProv = sec.b > 0.5;
   bool isHoverProv = sec.a > 0.5;
 
@@ -211,6 +213,12 @@ void main() {
   if (isHoverProv) {
     vec3 lifted = col * vec3(1.14, 1.12, 1.07) + reliefBase * vec3(0.055, 0.048, 0.030);
     col = mix(col, clamp(lifted, 0.0, 1.0), 0.85);
+  }
+
+  // Active construction ochre-gold diagonal hatching across the region
+  if (isConstructing) {
+    float stripe = step(mod(gl_FragCoord.x + gl_FragCoord.y, 11.0), 3.6);
+    col = mix(col, vec3(0.89, 0.69, 0.27), stripe * 0.44);
   }
 
   // Selected province: soft vermilion inner edge glow (#B83A2D) + relief-preserving warm lift

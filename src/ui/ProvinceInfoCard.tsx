@@ -1,20 +1,41 @@
 import { getFlagDataUri } from '../assets/flags/neutralFlags';
 import { getCountryInfo, TERRAIN_INFO } from '../data/countries1936';
+import { getRegionDefByProvince } from '../sim/data/regions1936';
+import { BUILDING_SPECS, INFRA_MULT_PERMILLE, type BuildingType } from '../sim/systems/industryTypes';
 import type { ProvinceRecord } from '../types/map';
+import { simIndustrySig, simPlayerTagSig, type AppActions } from './store/simStore';
 
 interface Props {
   hovered: ProvinceRecord | null;
   selected: ProvinceRecord | null;
   onClearSelected: () => void;
+  actions?: AppActions;
 }
 
-export function ProvinceInfoCard({ hovered, selected, onClearSelected }: Props) {
+const QUICK_BUILD: readonly BuildingType[] = ['CIV', 'MIL', 'DOC', 'INFRA', 'SYNTH'];
+
+export function ProvinceInfoCard({ hovered, selected, onClearSelected, actions }: Props) {
   const prov = hovered ?? selected;
   if (!prov) return null;
 
   const isSelectedShown = selected !== null && prov.id === selected.id;
   const country = getCountryInfo(prov.owner);
   const terrain = TERRAIN_INFO[prov.terrain];
+  const regDef = !prov.isSea ? getRegionDefByProvince(prov.id) : null;
+  const ind = simIndustrySig.value;
+  const regDyn = regDef && ind ? (ind.regions.find((r) => r.id === regDef.id) ?? null) : null;
+  const isOwnSelected = isSelectedShown && !prov.isSea && prov.owner === simPlayerTagSig.value && Boolean(regDef);
+
+  const usedSlots = regDyn ? regDyn.civ + regDyn.mil + regDyn.doc + regDyn.synth : regDef ? regDef.civ + regDef.mil + regDef.doc : 0;
+  const queuedSlots = regDef && ind
+    ? ind.queue.filter((q) => q.regionId === regDef.id && BUILDING_SPECS[q.building].usesSlot).length
+    : 0;
+  const queuedInfra = regDef && ind
+    ? ind.queue.filter((q) => q.regionId === regDef.id && q.building === 'INFRA').length
+    : 0;
+  const totalSlots = regDyn?.slots ?? regDef?.slots ?? 4;
+  const infraLvl = regDyn?.infra ?? regDef?.infra ?? 2;
+  const infraMult = ((INFRA_MULT_PERMILLE[infraLvl] ?? 1000) / 1000).toFixed(2);
 
   return (
     <aside class="prov-card" aria-label="省份情报卡">
@@ -94,6 +115,50 @@ export function ProvinceInfoCard({ hovered, selected, onClearSelected }: Props) 
           </span>
         )}
       </div>
+
+      {regDef && (
+        <div class="prov-region-box">
+          <div class="prov-region-head">
+            <span>行政工业区 · {regDef.nameZh}</span>
+            <span class="mono-num">
+              基建 Lv.{infraLvl} (×{infraMult})
+            </span>
+          </div>
+          <div class="prov-region-stats mono-num">
+            <span>
+              民{regDyn?.civ ?? regDef.civ} / 军{regDyn?.mil ?? regDef.mil} / 船{regDyn?.doc ?? regDef.doc}
+            </span>
+            <span>
+              槽 {usedSlots + queuedSlots}/{totalSlots}
+            </span>
+            <span>
+              钢{regDyn?.steel ?? regDef.steel} 油{regDyn?.oil ?? regDef.oil} 稀{regDyn?.rare ?? regDef.rare}
+            </span>
+          </div>
+          {isOwnSelected && actions && (
+            <div class="region-build-btns">
+              {QUICK_BUILD.map((b) => {
+                const sp = BUILDING_SPECS[b];
+                const disabled =
+                  (sp.requiresCoastal && !regDef.isCoastal) ||
+                  (b === 'INFRA' ? infraLvl + queuedInfra >= 5 : usedSlots + queuedSlots >= totalSlots);
+                return (
+                  <button
+                    key={b}
+                    type="button"
+                    class="build-mini-btn"
+                    disabled={disabled}
+                    onClick={() => actions.queueConstruction(regDef.id, b)}
+                    title={`在${regDef.nameZh}排入${sp.nameZh}（${sp.costFixed / 1000} CP）`}
+                  >
+                    +{sp.shortZh}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </aside>
   );
 }

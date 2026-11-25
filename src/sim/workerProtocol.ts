@@ -4,6 +4,7 @@
  */
 import type { GameCommand, InitScenarioPayload } from './core/GameCommand';
 import type { TickerDispatch } from './core/SimEngine';
+import type { IndustrySnapshot } from './systems/industryTypes';
 
 export type MainToWorkerMessage =
   | { type: 'INIT'; payload: InitScenarioPayload }
@@ -17,4 +18,5 @@ export type WorkerToMainMessage =
       type: 'SNAPSHOT';
       buffer: ArrayBuffer;
       dispatches?: TickerDispatch[];
+      industry?: IndustrySnapshot;
     };

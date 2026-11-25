@@ -49,10 +49,11 @@ const LEGENDS: Partial<Record<MapMode, Array<{ label: string; color: string }>>>
     { label: '中立国', color: '#B0A89A' },
   ],
   industry: [
-    { label: '重工核心', color: '#9E4C3A' },
-    { label: '工业区', color: '#B87E4A' },
-    { label: '轻工城镇', color: '#C4AE80' },
-    { label: '农业腹地', color: '#DAD2C1' },
+    { label: '重工核心(≥6厂)', color: '#9E4C3A' },
+    { label: '工业区(4–5)', color: '#B87E4A' },
+    { label: '轻工区(2–3)', color: '#C4AE80' },
+    { label: '腹地(≤1)', color: '#DAD2C1' },
+    { label: '施工中', color: '#E3AD4B' },
   ],
   air_sea: [
     { label: '战略枢纽', color: '#547CA6' },
@@ -164,12 +165,13 @@ export function AppShell({ actions }: Props) {
             </aside>
           )}
 
-          <RightDossierDrawer onClose={() => actions.toggleDrawer(null)} />
+          <RightDossierDrawer actions={actions} onClose={() => actions.toggleDrawer(null)} />
 
           <ProvinceInfoCard
             hovered={hovered}
             selected={selected}
             onClearSelected={actions.clearSelection}
+            actions={actions}
           />
 
           <BottomCommandDock actions={actions} />

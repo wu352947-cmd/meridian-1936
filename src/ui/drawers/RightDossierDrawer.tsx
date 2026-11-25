@@ -8,9 +8,12 @@ import {
   simNationsSig,
   simPlayerTagSig,
   simTickSig,
+  type AppActions,
 } from '../store/simStore';
+import { IndustryDrawer } from './IndustryDrawer';
 
 interface Props {
+  actions: AppActions;
   onClose: () => void;
 }
 
@@ -62,7 +65,7 @@ const DRAWER_SPEC: Record<
   },
 };
 
-export function RightDossierDrawer({ onClose }: Props) {
+export function RightDossierDrawer({ actions, onClose }: Props) {
   const tab = activeDrawerSig.value;
   if (!tab) return null;
 
@@ -85,6 +88,9 @@ export function RightDossierDrawer({ onClose }: Props) {
         </button>
       </div>
 
+      {tab === 'industry' ? (
+        <IndustryDrawer actions={actions} />
+      ) : (
       <div class="drawer-body">
         <div class="drawer-stamp-card">
           <div class="drawer-stamp-top">
@@ -142,6 +148,7 @@ export function RightDossierDrawer({ onClose }: Props) {
           </ul>
         </div>
       </div>
+      )}
     </aside>
   );
 }

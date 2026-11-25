@@ -2,7 +2,7 @@ import { getFlagDataUri } from '../../assets/flags/neutralFlags';
 import { getCountryInfo } from '../../data/countries1936';
 import { formatFixedNum, formatPermillePct } from '../../sim/core/FixedMath';
 import { REGIME_META } from '../../sim/data/nations1936';
-import { simNationsSig, simPlayerTagSig, type AppActions } from '../store/simStore';
+import { simIndustrySig, simNationsSig, simPlayerTagSig, type AppActions } from '../store/simStore';
 
 interface Props {
   actions: AppActions;
@@ -16,6 +16,10 @@ export function TopLeftNationBrief({ actions }: Props) {
   const tag = simPlayerTagSig.value;
   const info = getCountryInfo(tag);
   const nation = simNationsSig.value[tag];
+  const ind = simIndustrySig.value;
+  const resTooltip = ind && ind.tag === tag
+    ? `模拟资源日净余｜钢:产${ind.resources.steel.prod}/需${ind.resources.steel.demand}/进${ind.resources.steel.imported}｜油:产${ind.resources.oil.prod}/需${ind.resources.oil.demand}/进${ind.resources.oil.imported}｜稀:产${ind.resources.rare.prod}/需${ind.resources.rare.demand}/进${ind.resources.rare.imported}`
+    : '战略资源净余量：钢铁 / 原油 / 稀有金属';
 
   const regime = nation ? REGIME_META[nation.regime] : REGIME_META.neutral;
   const apText = nation ? Math.floor(nation.apPermille / 1000).toString() : '—';
@@ -84,7 +88,7 @@ export function TopLeftNationBrief({ actions }: Props) {
           </span>
         </div>
 
-        <div class="hud-stat hud-stat-res" title="战略资源净余量：钢铁 / 原油 / 稀有金属">
+        <div class="hud-stat hud-stat-res" title={resTooltip}>
           <span class="hud-stat-k">钢 / 油 / 稀</span>
           <span class="hud-stat-v mono-num">
             <span class={nation && nation.steelNet < 0 ? 'val-neg' : 'val-pos'}>

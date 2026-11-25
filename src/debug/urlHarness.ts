@@ -1,8 +1,10 @@
 import type { SimSpeed } from '../sim/core/ClockCalendar';
+import type { BuildingType } from '../sim/systems/industryTypes';
 import type { MapMode } from '../types/map';
 
 export type ScreenMode = 'country_select' | 'game';
 export type DrawerTab = 'directives' | 'diplomacy' | 'industry' | 'tech' | 'logistics' | 'army';
+export type IndustrySubTab = 'production' | 'construction' | 'trade';
 
 export interface UrlHarnessParams {
   autotest: boolean;
@@ -14,6 +16,9 @@ export interface UrlHarnessParams {
   paused: boolean | null;
   speed: SimSpeed | null;
   panel: DrawerTab | null;
+  subtab: IndustrySubTab | null;
+  autotrade: boolean | null;
+  queue: Array<{ regionId: number; building: BuildingType }>;
   mapmode: MapMode;
   cam: { x: number; y: number; zoom: number } | null;
   selectProv: number | null;
@@ -40,6 +45,9 @@ const VALID_PANELS = new Set<DrawerTab>([
   'army',
 ]);
 
+const VALID_SUBTABS = new Set<IndustrySubTab>(['production', 'construction', 'trade']);
+const VALID_BUILDINGS = new Set<BuildingType>(['CIV', 'MIL', 'DOC', 'INFRA', 'SYNTH']);
+
 export function parseUrlHarness(search: string = window.location.search): UrlHarnessParams {
   const sp = new URLSearchParams(search);
   const autotest = sp.get('autotest') === '1';
@@ -49,6 +57,30 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
 
   const rawPanel = sp.get('panel') as DrawerTab | null;
   const panel: DrawerTab | null = rawPanel && VALID_PANELS.has(rawPanel) ? rawPanel : null;
+
+  const rawSubtab = sp.get('subtab') as IndustrySubTab | null;
+  const subtab: IndustrySubTab | null = rawSubtab && VALID_SUBTABS.has(rawSubtab) ? rawSubtab : null;
+
+  const rawAutoTrade = sp.get('autotrade');
+  const autotrade: boolean | null =
+    rawAutoTrade === '1' || rawAutoTrade === 'true'
+      ? true
+      : rawAutoTrade === '0' || rawAutoTrade === 'false'
+        ? false
+        : null;
+
+  const queue: Array<{ regionId: number; building: BuildingType }> = [];
+  const rawQueue = sp.get('queue');
+  if (rawQueue) {
+    for (const part of rawQueue.split(',')) {
+      const [ridStr, bStr] = part.trim().split(':');
+      const regionId = Number.parseInt(ridStr ?? '', 10);
+      const building = (bStr ?? '').trim().toUpperCase() as BuildingType;
+      if (Number.isFinite(regionId) && regionId > 0 && VALID_BUILDINGS.has(building)) {
+        queue.push({ regionId, building });
+      }
+    }
+  }
 
   const rawCountry = (sp.get('country') ?? '').trim().toUpperCase();
   const country = /^[A-Z]{3}$/.test(rawCountry) ? rawCountry : 'GER';
@@ -116,6 +148,9 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     paused,
     speed,
     panel,
+    subtab,
+    autotrade,
+    queue,
     mapmode,
     cam,
     selectProv: parseIntOrNull(sp.get('selectProv')),

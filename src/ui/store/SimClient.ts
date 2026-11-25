@@ -7,10 +7,11 @@ import type { GameCommand, InitScenarioPayload } from '../../sim/core/GameComman
 import { decodeSnapshot, type WorldSnapshot } from '../../sim/core/SnapshotCodec';
 import type { TickerDispatch } from '../../sim/core/SimEngine';
 import { PLAYABLE_TAG_LIST } from '../../sim/data/nations1936';
+import type { BuildingType, EquipmentType, IndustrySnapshot } from '../../sim/systems/industryTypes';
 import type { MainToWorkerMessage, WorkerToMainMessage } from '../../sim/workerProtocol';
 
 export interface SimClientHandlers {
-  onSnapshot: (snap: WorldSnapshot, dispatches?: TickerDispatch[]) => void;
+  onSnapshot: (snap: WorldSnapshot, dispatches?: TickerDispatch[], industry?: IndustrySnapshot) => void;
 }
 
 export class SimClient {
@@ -47,7 +48,7 @@ export class SimClient {
         const ret: MainToWorkerMessage = { type: 'RETURN_BUFFER', buffer: msg.buffer };
         this.worker.postMessage(ret, [msg.buffer]);
 
-        handlers.onSnapshot(snap, msg.dispatches);
+        handlers.onSnapshot(snap, msg.dispatches, msg.industry);
 
         if (this.snapshotWaiters.length > 0) {
           const waiters = this.snapshotWaiters.splice(0);
@@ -96,6 +97,30 @@ export class SimClient {
 
   setDate(isoDate: string): void {
     this.sendCommand('SET_DATE', { isoDate });
+  }
+
+  queueConstruction(regionId: number, building: BuildingType): void {
+    this.sendCommand('QUEUE_CONSTRUCTION', { regionId, building });
+  }
+
+  cancelConstruction(projectId: number): void {
+    this.sendCommand('CANCEL_CONSTRUCTION', { projectId });
+  }
+
+  reorderConstruction(projectId: number, direction: 'up' | 'down' | 'top'): void {
+    this.sendCommand('REORDER_CONSTRUCTION', { projectId, direction });
+  }
+
+  setLineFactories(eqType: EquipmentType, factories: number): void {
+    this.sendCommand('SET_LINE_FACTORIES', { eqType, factories });
+  }
+
+  switchProductionLine(fromType: EquipmentType, toType: EquipmentType, count?: number): void {
+    this.sendCommand('SWITCH_PRODUCTION_LINE', { fromType, toType, count });
+  }
+
+  toggleAutoTrade(enabled?: boolean): void {
+    this.sendCommand('TOGGLE_AUTO_TRADE', { enabled });
   }
 
   stepOnce(): void {

@@ -3,13 +3,20 @@
  * Pure JSON-serializable payloads for replayability and desync-free simulation.
  */
 import type { SimSpeed } from './ClockCalendar';
+import type { BuildingType, EquipmentType } from '../systems/industryTypes';
 
 export type CommandType =
   | 'INIT_SCENARIO'
   | 'SELECT_COUNTRY'
   | 'SET_SPEED'
   | 'TOGGLE_PAUSE'
-  | 'SET_DATE';
+  | 'SET_DATE'
+  | 'QUEUE_CONSTRUCTION'
+  | 'CANCEL_CONSTRUCTION'
+  | 'REORDER_CONSTRUCTION'
+  | 'SET_LINE_FACTORIES'
+  | 'SWITCH_PRODUCTION_LINE'
+  | 'TOGGLE_AUTO_TRADE';
 
 export interface InitScenarioPayload {
   scenarioId: '1936';
@@ -18,6 +25,8 @@ export interface InitScenarioPayload {
   startDate?: string;
   paused?: boolean;
   speed?: SimSpeed;
+  autoTrade?: boolean;
+  initialQueue?: Array<{ regionId: number; building: BuildingType }>;
 }
 
 export interface SelectCountryPayload {
@@ -36,12 +45,47 @@ export interface SetDatePayload {
   isoDate: string;
 }
 
+export interface QueueConstructionPayload {
+  regionId: number;
+  building: BuildingType;
+}
+
+export interface CancelConstructionPayload {
+  projectId: number;
+}
+
+export interface ReorderConstructionPayload {
+  projectId: number;
+  direction: 'up' | 'down' | 'top';
+}
+
+export interface SetLineFactoriesPayload {
+  eqType: EquipmentType;
+  factories: number;
+}
+
+export interface SwitchProductionLinePayload {
+  fromType: EquipmentType;
+  toType: EquipmentType;
+  count?: number;
+}
+
+export interface ToggleAutoTradePayload {
+  enabled?: boolean;
+}
+
 export type GameCommandPayload =
   | InitScenarioPayload
   | SelectCountryPayload
   | SetSpeedPayload
   | TogglePausePayload
-  | SetDatePayload;
+  | SetDatePayload
+  | QueueConstructionPayload
+  | CancelConstructionPayload
+  | ReorderConstructionPayload
+  | SetLineFactoriesPayload
+  | SwitchProductionLinePayload
+  | ToggleAutoTradePayload;
 
 export interface GameCommand<T extends CommandType = CommandType> {
   tick: number;

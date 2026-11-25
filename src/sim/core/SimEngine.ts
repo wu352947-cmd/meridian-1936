@@ -6,16 +6,24 @@ import { dateStringToTick, formatDateIso, TICKS_PER_DAY, tickToDate, type SimSpe
 import { clampInt, FIXED_SCALE, mulFixed } from './FixedMath';
 import {
   CommandQueue,
+  type CancelConstructionPayload,
   type GameCommand,
   type InitScenarioPayload,
+  type QueueConstructionPayload,
+  type ReorderConstructionPayload,
   type SelectCountryPayload,
   type SetDatePayload,
+  type SetLineFactoriesPayload,
   type SetSpeedPayload,
+  type SwitchProductionLinePayload,
+  type ToggleAutoTradePayload,
   type TogglePausePayload,
 } from './GameCommand';
 import { SeededRng } from './SeededRng';
 import type { SimNationSnapshot, WorldSnapshot } from './SnapshotCodec';
 import { ALL_PLAYABLE_NATIONS_1936, isPlayableTag } from '../data/nations1936';
+import { IndustrySystem } from '../systems/industrySystem';
+import { BUILDING_SPECS, type IndustrySnapshot } from '../systems/industryTypes';
 
 export interface TickerDispatch {
   id: number;
@@ -40,8 +48,10 @@ export class SimEngine {
   private rng: SeededRng;
   private nations: SimNationSnapshot[] = [];
   private readonly commands = new CommandQueue();
+  private readonly industry = new IndustrySystem();
   private dispatches: TickerDispatch[] = [];
   private nextDispatchId = 1;
+  private industryRevision = 1;
 
   constructor(seed = 19360101, playerTag = 'GER') {
     this.seed = seed >>> 0;
@@ -85,6 +95,19 @@ export class SimEngine {
         isMajor: p.isMajor,
       };
     });
+
+    this.industry.reset(this.getCohesionMap());
+    if (typeof opts.autoTrade === 'boolean') {
+      this.industry.toggleAutoTrade(this.playerTag, opts.autoTrade, this.getCohesionMap());
+    }
+    if (opts.initialQueue && opts.initialQueue.length > 0) {
+      const coh = this.getCohesionMap();
+      for (const item of opts.initialQueue) {
+        this.industry.queueConstruction(this.playerTag, item.regionId, item.building, coh);
+      }
+    }
+    this.syncNationsFromIndustry();
+    this.industryRevision += 1;
 
     this.pushDispatch('info', '1936 欧洲参谋部总图就绪，等待签批指令。', this.playerTag);
 
@@ -137,6 +160,17 @@ export class SimEngine {
       nation.apPermille = clampInt(nation.apPermille + dailyAp, 0, 999 * FIXED_SCALE);
     }
 
+    // Batch 03 daily industrial production, construction & auto-trade settlement
+    const completed = this.industry.stepDaily(this.getCohesionMap());
+    this.syncNationsFromIndustry();
+    this.industryRevision += 1;
+    for (const ev of completed) {
+      if (ev.tag === this.playerTag) {
+        const bName = BUILDING_SPECS[ev.building].nameZh;
+        this.pushDispatch('info', `${ev.regionNameZh}竣工 1 座${bName}`, ev.tag);
+      }
+    }
+
     const d = tickToDate(this.tick);
     if (d.year === 1936 && d.month === 3 && d.day === 7) {
       this.crisisPermille = clampInt(this.crisisPermille + 50, 0, FIXED_SCALE);
@@ -144,6 +178,25 @@ export class SimEngine {
     } else if (d.day === 1 && (d.month !== 1 || d.year > 1936)) {
       const code = 100 + (roll % 900);
       this.pushDispatch('routine', `月度参谋例行简报归档（密电 #${code}）`, this.playerTag);
+    }
+  }
+
+  private getCohesionMap(): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const n of this.nations) map.set(n.tag, n.cohesionPermille);
+    return map;
+  }
+
+  private syncNationsFromIndustry(): void {
+    for (const n of this.nations) {
+      const s = this.industry.getNationSummary(n.tag);
+      if (!s) continue;
+      n.civ = s.civ;
+      n.mil = s.mil;
+      n.doc = s.doc;
+      n.steelNet = s.steelNet;
+      n.oilNet = s.oilNet;
+      n.rareNet = s.rareNet;
     }
   }
 
@@ -162,6 +215,7 @@ export class SimEngine {
         const tag = (cmd.payload as SelectCountryPayload).countryTag;
         if (isPlayableTag(tag)) {
           this.playerTag = tag;
+          this.industryRevision += 1;
           this.pushDispatch('info', `统帅部执掌切换至 ${tag}，参谋卷宗已同步更新。`, tag);
         }
         break;
@@ -196,6 +250,59 @@ export class SimEngine {
             });
           }
         }
+        break;
+      }
+      case 'QUEUE_CONSTRUCTION': {
+        const { regionId, building } = cmd.payload as QueueConstructionPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.industry.queueConstruction(actor, regionId, building, this.getCohesionMap())) {
+          this.syncNationsFromIndustry();
+          this.industryRevision += 1;
+        }
+        break;
+      }
+      case 'CANCEL_CONSTRUCTION': {
+        const { projectId } = cmd.payload as CancelConstructionPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.industry.cancelConstruction(actor, projectId, this.getCohesionMap())) {
+          this.syncNationsFromIndustry();
+          this.industryRevision += 1;
+        }
+        break;
+      }
+      case 'REORDER_CONSTRUCTION': {
+        const { projectId, direction } = cmd.payload as ReorderConstructionPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.industry.reorderConstruction(actor, projectId, direction, this.getCohesionMap())) {
+          this.syncNationsFromIndustry();
+          this.industryRevision += 1;
+        }
+        break;
+      }
+      case 'SET_LINE_FACTORIES': {
+        const { eqType, factories } = cmd.payload as SetLineFactoriesPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.industry.setLineFactories(actor, eqType, factories, this.getCohesionMap())) {
+          this.syncNationsFromIndustry();
+          this.industryRevision += 1;
+        }
+        break;
+      }
+      case 'SWITCH_PRODUCTION_LINE': {
+        const { fromType, toType, count } = cmd.payload as SwitchProductionLinePayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.industry.switchProductionLine(actor, fromType, toType, count, this.getCohesionMap())) {
+          this.syncNationsFromIndustry();
+          this.industryRevision += 1;
+        }
+        break;
+      }
+      case 'TOGGLE_AUTO_TRADE': {
+        const { enabled } = cmd.payload as ToggleAutoTradePayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        this.industry.toggleAutoTrade(actor, enabled, this.getCohesionMap());
+        this.syncNationsFromIndustry();
+        this.industryRevision += 1;
         break;
       }
     }
@@ -241,6 +348,7 @@ export class SimEngine {
       mix(n.civ + (n.mil << 10) + (n.doc << 20));
       mix(n.steelNet ^ (n.oilNet << 8) ^ (n.rareNet << 16));
     }
+    this.industry.mixHash(mix);
     return h >>> 0;
   }
 
@@ -267,5 +375,13 @@ export class SimEngine {
 
   getDispatches(): TickerDispatch[] {
     return this.dispatches.slice();
+  }
+
+  getIndustryRevision(): number {
+    return this.industryRevision;
+  }
+
+  getIndustrySnapshot(tag = this.playerTag): IndustrySnapshot {
+    return this.industry.getSnapshotFor(tag);
   }
 }
