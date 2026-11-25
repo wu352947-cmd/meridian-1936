@@ -26,6 +26,14 @@ export interface BrigadeState {
   moveTargetProvId: number | null;
   /** True when player explicitly commanded this brigade; army AI must not override until arrival. */
   manualOverride: boolean;
+  /** Stationary entrenchment bonus in permille (0..330). */
+  entrenchPermille: number;
+  /** Stationary frontline offensive planning bonus in permille (0..240). */
+  planPermille: number;
+  /** Active battle ID if currently engaged in province combat. */
+  inCombatBattleId: number | null;
+  /** True while executing forced retreat after defeat. */
+  retreating: boolean;
 }
 
 export interface TrainingOrderState {
@@ -77,6 +85,7 @@ export interface ArmyState {
   owner: string;
   nameZh: string;
   color: string;
+  commanderId: string | null;
   brigadeIds: number[];
   frontline: FrontlineOrder | null;
   arrow: OffensiveArrowOrder | null;
@@ -110,6 +119,10 @@ export interface BrigadeSnap {
   moveProgressPermille: number;
   etaTicks: number;
   manualOverride: boolean;
+  entrenchPermille: number;
+  planPermille: number;
+  inCombatBattleId: number | null;
+  retreating: boolean;
 }
 
 export interface ArmySnap {
@@ -117,6 +130,7 @@ export interface ArmySnap {
   owner: string;
   nameZh: string;
   color: string;
+  commanderId: string | null;
   brigadeIds: number[];
   frontline: FrontlineOrder | null;
   arrow: OffensiveArrowOrder | null;

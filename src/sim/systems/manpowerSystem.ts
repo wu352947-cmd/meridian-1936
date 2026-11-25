@@ -94,6 +94,14 @@ export class ManpowerSystem {
     n.inTraining = Math.max(0, Math.trunc(inTraining));
   }
 
+  /** Record combat manpower casualties into cumulative losses (Batch 06). */
+  addCasualties(tag: string, men: number): void {
+    const n = this.nations.get(tag);
+    const delta = Math.max(0, Math.trunc(men));
+    if (!n || delta <= 0) return;
+    n.casualties += delta;
+  }
+
   /** Recalculate max cap immediately when laws/modifiers change; upward gap fills smoothly over time. */
   syncRates(tag: string, baseRatePermille: number, rateModifierPermille: number): void {
     const n = this.nations.get(tag);

@@ -8,6 +8,7 @@ import {
   MAX_ARMY_BRIGADES,
   type BrigadeType,
 } from '../data/brigadeTemplates';
+import { getCommandersForNation, getCommanderSpeedBonusPermille } from '../data/commanders1936';
 import {
   buildOpeningBrigadesForNation,
   getAllOpeningNationProfiles,
@@ -20,11 +21,13 @@ import {
   stepBrigadesMovementTick,
   toArmySnap,
   toBrigadeSnap,
+  type StepEnterDecision,
 } from './armyMovement';
 import {
   buildFrontlineOrder,
   buildOffensiveArrowOrder,
   computeFrontlineAssignments,
+  type ControllerResolver,
 } from './armyOrderSystem';
 import type { ArmyState, ArmySystemSnapshot, BrigadeState, TrainingOrderState } from './armyTypes';
 import {
@@ -72,8 +75,14 @@ export class ArmySystem {
     for (const profile of getAllOpeningNationProfiles()) {
       const plans = buildOpeningBrigadesForNation(profile);
       const armyDefs = getOpeningArmyDefs(profile.tag, plans.length);
-      const createdArmies: ArmyState[] = armyDefs.map((d) =>
-        this.spawnArmyInternal(profile.tag, d.nameZh, ARMY_COLORS[d.colorIndex % ARMY_COLORS.length]!),
+      const cmdPool = getCommandersForNation(profile.tag);
+      const createdArmies: ArmyState[] = armyDefs.map((d, idx) =>
+        this.spawnArmyInternal(
+          profile.tag,
+          d.nameZh,
+          ARMY_COLORS[d.colorIndex % ARMY_COLORS.length]!,
+          cmdPool[idx]?.id ?? null,
+        ),
       );
       for (const plan of plans) {
         const army = createdArmies[plan.armySlot] ?? createdArmies[0] ?? null;
@@ -82,12 +91,18 @@ export class ArmySystem {
     }
   }
 
-  private spawnArmyInternal(owner: string, nameZh: string, color: string): ArmyState {
+  private spawnArmyInternal(
+    owner: string,
+    nameZh: string,
+    color: string,
+    commanderId: string | null = null,
+  ): ArmyState {
     const a: ArmyState = {
       id: this.nextArmyId++,
       owner,
       nameZh,
       color,
+      commanderId,
       brigadeIds: [],
       frontline: null,
       arrow: null,
@@ -122,6 +137,10 @@ export class ArmySystem {
       moveEdgeCostFixed: 0,
       moveTargetProvId: null,
       manualOverride: false,
+      entrenchPermille: 0,
+      planPermille: 0,
+      inCombatBattleId: null,
+      retreating: false,
     };
     this.brigades.push(b);
     this.brigadeById.set(b.id, b);
@@ -167,18 +186,41 @@ export class ArmySystem {
     return this.attachToArmy(b, armyId);
   }
 
+  assignCommander(owner: string, armyId: number, commanderId: string | null): boolean {
+    const army = this.armyById.get(armyId);
+    if (!army || army.owner !== owner) return false;
+    if (commanderId !== null) {
+      for (const other of this.armies) {
+        if (other.owner === owner && other.commanderId === commanderId && other.id !== armyId) {
+          other.commanderId = null;
+        }
+      }
+    }
+    army.commanderId = commanderId;
+    return true;
+  }
+
+  getArmySpeedMod(tag: string, armyId: number | null, baseMod: number): number {
+    if (armyId === null) return baseMod;
+    const a = this.armyById.get(armyId);
+    if (!a || a.owner !== tag) return baseMod;
+    return baseMod + getCommanderSpeedBonusPermille(a.commanderId);
+  }
+
   marchBrigades(
     owner: string,
     brigadeIds: readonly number[],
     targetProvId: number,
     speedModPermille: number,
     hostileTags?: ReadonlySet<string>,
+    getController?: ControllerResolver,
   ): number {
     let moved = 0;
     for (const bid of brigadeIds) {
       const b = this.brigadeById.get(bid);
-      if (!b || b.owner !== owner) continue;
-      if (assignBrigadePath(b, targetProvId, speedModPermille, true, hostileTags)) {
+      if (!b || b.owner !== owner || b.retreating) continue;
+      const spd = this.getArmySpeedMod(owner, b.armyId, speedModPermille);
+      if (assignBrigadePath(b, targetProvId, spd, true, hostileTags, getController)) {
         moved += 1;
       }
     }
@@ -192,14 +234,20 @@ export class ArmySystem {
     return true;
   }
 
-  bindFrontline(owner: string, armyId: number, targetTag: string, speedModPermille: number): boolean {
+  bindFrontline(
+    owner: string,
+    armyId: number,
+    targetTag: string,
+    speedModPermille: number,
+    getController?: ControllerResolver,
+  ): boolean {
     const army = this.armyById.get(armyId);
     if (!army || army.owner !== owner) return false;
-    const fl = buildFrontlineOrder(owner, targetTag);
+    const fl = buildFrontlineOrder(owner, targetTag, getController);
     if (!fl) return false;
     army.frontline = fl;
     if (army.arrow && army.arrow.targetTag !== targetTag) army.arrow = null;
-    this.dispatchArmyFrontline(army, speedModPermille);
+    this.dispatchArmyFrontline(army, speedModPermille, getController);
     return true;
   }
 
@@ -218,12 +266,28 @@ export class ArmySystem {
     targetProvId: number,
     bendOffsetX?: number,
     bendOffsetY?: number,
+    getController?: ControllerResolver,
   ): boolean {
     const army = this.armyById.get(armyId);
     if (!army || army.owner !== owner) return false;
-    const order = buildOffensiveArrowOrder(this.nextArrowId++, army, startProvId, targetProvId, bendOffsetX, bendOffsetY);
+    const order = buildOffensiveArrowOrder(
+      this.nextArrowId++,
+      army,
+      startProvId,
+      targetProvId,
+      bendOffsetX,
+      bendOffsetY,
+      getController,
+    );
     if (!order) return false;
     army.arrow = order;
+    return true;
+  }
+
+  toggleOffensiveArrowActive(owner: string, armyId: number, active?: boolean): boolean {
+    const army = this.armyById.get(armyId);
+    if (!army || army.owner !== owner || !army.arrow) return false;
+    army.arrow.active = typeof active === 'boolean' ? active : !army.arrow.active;
     return true;
   }
 
@@ -234,19 +298,34 @@ export class ArmySystem {
     return true;
   }
 
+  /** Refresh an army's frontline after province control shifts. */
+  refreshFrontlines(getController: ControllerResolver): void {
+    for (const army of this.armies) {
+      if (!army.frontline) continue;
+      const updated = buildFrontlineOrder(army.owner, army.frontline.targetTag, getController);
+      if (updated) {
+        army.frontline = updated;
+      }
+      if (army.arrow && getController(army.arrow.targetProvId) === army.owner) {
+        army.arrow.active = false;
+      }
+    }
+  }
+
   /** Dispatch non-manualOverride brigades of an army evenly onto its bound frontline. */
-  dispatchArmyFrontline(army: ArmyState, speedModPermille: number): void {
+  dispatchArmyFrontline(army: ArmyState, speedModPermille: number, getController?: ControllerResolver): void {
     if (!army.frontline) return;
     const brigs = army.brigadeIds
       .map((id) => this.brigadeById.get(id))
       .filter((b): b is BrigadeState => b !== undefined);
-    const assignMap = computeFrontlineAssignments(army.frontline, brigs, army.owner);
+    const assignMap = computeFrontlineAssignments(army.frontline, brigs, army.owner, getController);
+    const spd = this.getArmySpeedMod(army.owner, army.id, speedModPermille);
     for (const [bid, targetProvId] of assignMap.entries()) {
       const b = this.brigadeById.get(bid);
-      if (!b || b.manualOverride) continue;
+      if (!b || b.manualOverride || b.inCombatBattleId !== null || b.retreating) continue;
       if (b.provinceId === targetProvId && b.path.length === 0) continue;
       if (b.moveTargetProvId === targetProvId) continue;
-      assignBrigadePath(b, targetProvId, speedModPermille, false);
+      assignBrigadePath(b, targetProvId, spd, false, undefined, getController);
     }
   }
 
@@ -281,11 +360,23 @@ export class ArmySystem {
     return true;
   }
 
-  stepTick(getSpeedMod: (tag: string) => number): void {
-    stepBrigadesMovementTick(this.brigades, getSpeedMod);
+  stepTick(
+    getSpeedMod: (tag: string) => number,
+    hooks?: {
+      getController?: ControllerResolver;
+      onBeforeEnterProvince?: (b: BrigadeState, nextProvId: number) => StepEnterDecision;
+      onEnteredProvince?: (b: BrigadeState, provId: number) => void;
+    },
+  ): void {
+    stepBrigadesMovementTick(
+      this.brigades,
+      (tag, aid) => this.getArmySpeedMod(tag, aid, getSpeedMod(tag)),
+      hooks?.onBeforeEnterProvince,
+      hooks?.onEnteredProvince,
+    );
     for (const army of this.armies) {
       if (army.frontline) {
-        this.dispatchArmyFrontline(army, getSpeedMod(army.owner));
+        this.dispatchArmyFrontline(army, getSpeedMod(army.owner), hooks?.getController);
       }
     }
   }
@@ -377,9 +468,42 @@ export class ArmySystem {
   getDeployedManpower(tag: string): number {
     let sum = 0;
     for (const b of this.brigades) {
-      if (b.owner === tag) sum += BRIGADE_TEMPLATES[b.template].manpower;
+      if (b.owner === tag) {
+        sum += Math.floor((BRIGADE_TEMPLATES[b.template].manpower * b.strengthPermille) / 1000);
+      }
     }
     return sum;
+  }
+
+  getAllBrigades(): readonly BrigadeState[] {
+    return this.brigades;
+  }
+
+  getAllArmies(): readonly ArmyState[] {
+    return this.armies;
+  }
+
+  spawnBrigadeForTest(
+    owner: string,
+    template: BrigadeType,
+    provinceId: number,
+    armyId: number | null = null,
+    orgPermille = 1000,
+    strengthPermille = 1000,
+  ): BrigadeState {
+    return this.spawnBrigadeInternal(owner, template, provinceId, armyId, orgPermille, strengthPermille);
+  }
+
+  removeBrigade(id: number): BrigadeState | null {
+    const b = this.brigadeById.get(id);
+    if (!b) return null;
+    if (b.armyId !== null) {
+      const a = this.armyById.get(b.armyId);
+      if (a) a.brigadeIds = a.brigadeIds.filter((bid) => bid !== id);
+    }
+    this.brigadeById.delete(id);
+    this.brigades = this.brigades.filter((x) => x.id !== id);
+    return b;
   }
 
   getInTrainingManpower(tag: string): number {

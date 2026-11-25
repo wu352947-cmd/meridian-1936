@@ -22,6 +22,8 @@ export interface FindPathOptions {
   speedModPermille?: number;
   /** Optional hostile tags that units are permitted to enter (default: none — own territory only). */
   hostileTags?: ReadonlySet<string>;
+  /** Optional dynamic province controller resolver (defaults to static 1936 owner). */
+  getController?: (provId: number) => string;
 }
 
 const DIST_TIME_FACTOR = 2600;
@@ -44,21 +46,27 @@ export function calcEdgeMarchTicksFixed(
   return Math.max(FIXED_SCALE, Math.floor((dist * DIST_TIME_FACTOR) / effRate));
 }
 
-function canTraverse(prov: SimProvince, ownerTag: string, hostileTags?: ReadonlySet<string>): boolean {
-  if (prov.owner === ownerTag) return true;
-  if (hostileTags && hostileTags.has(prov.owner)) return true;
+function canTraverse(
+  prov: SimProvince,
+  ownerTag: string,
+  hostileTags?: ReadonlySet<string>,
+  getController?: (provId: number) => string,
+): boolean {
+  const ctrl = getController ? getController(prov.id) : prov.owner;
+  if (ctrl === ownerTag) return true;
+  if (hostileTags && hostileTags.has(ctrl)) return true;
   return false;
 }
 
 export function findLandPath(opts: FindPathOptions): PathResult | null {
-  const { startProvId, goalProvId, ownerTag, speedTenth, speedModPermille = 0, hostileTags } = opts;
+  const { startProvId, goalProvId, ownerTag, speedTenth, speedModPermille = 0, hostileTags, getController } = opts;
   const start = getSimProvince(startProvId);
   const goal = getSimProvince(goalProvId);
   if (!start || !goal) return null;
   if (startProvId === goalProvId) {
-    return canTraverse(goal, ownerTag, hostileTags) ? { path: [], totalTicksFixed: 0 } : null;
+    return canTraverse(goal, ownerTag, hostileTags, getController) ? { path: [], totalTicksFixed: 0 } : null;
   }
-  if (!canTraverse(goal, ownerTag, hostileTags)) return null;
+  if (!canTraverse(goal, ownerTag, hostileTags, getController)) return null;
 
   const maxSpeedTenth = calcEffectiveSpeedTenth(speedTenth, speedModPermille);
   const heuristic = (p: SimProvince): number => {
@@ -112,7 +120,7 @@ export function findLandPath(opts: FindPathOptions): PathResult | null {
     for (const nbId of curProv.neighbors) {
       if (closed.has(nbId)) continue;
       const nb = getSimProvince(nbId);
-      if (!nb || !canTraverse(nb, ownerTag, hostileTags)) continue;
+      if (!nb || !canTraverse(nb, ownerTag, hostileTags, getController)) continue;
 
       const stepCost = calcEdgeMarchTicksFixed(curProv, nb, speedTenth, speedModPermille);
       const tentG = curG + stepCost;

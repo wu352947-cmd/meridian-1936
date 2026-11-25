@@ -4,20 +4,29 @@
  * Pure TypeScript, zero DOM/PIXI.
  */
 import { BRIGADE_TEMPLATES } from '../data/brigadeTemplates';
-import { getOwnerProvinces, getSimProvince } from '../data/provinces1936';
+import { getSimProvince, SIM_PROVINCES } from '../data/provinces1936';
 import type { ArmyState, BrigadeState, FrontlineBorderPair, FrontlineOrder, OffensiveArrowOrder } from './armyTypes';
 import { findLandPath } from './pathfinding';
 
-/** Build ordered frontline provinces + border pairs between ownerTag and targetTag. */
-export function buildFrontlineOrder(ownerTag: string, targetTag: string): FrontlineOrder | null {
+export type ControllerResolver = (provId: number) => string;
+
+const defaultController: ControllerResolver = (id) => getSimProvince(id)?.owner ?? '';
+
+/** Build ordered frontline provinces + border pairs between ownerTag and targetTag using live controllers. */
+export function buildFrontlineOrder(
+  ownerTag: string,
+  targetTag: string,
+  getController: ControllerResolver = defaultController,
+): FrontlineOrder | null {
   if (ownerTag === targetTag) return null;
   const friendlySet = new Set<number>();
   const borderPairs: FrontlineBorderPair[] = [];
 
-  for (const p of getOwnerProvinces(ownerTag)) {
+  for (const p of SIM_PROVINCES) {
+    if (getController(p.id) !== ownerTag) continue;
     for (const nid of p.neighbors) {
       const nb = getSimProvince(nid);
-      if (nb && nb.owner === targetTag) {
+      if (nb && getController(nb.id) === targetTag) {
         friendlySet.add(p.id);
         borderPairs.push({ friendlyProvId: p.id, enemyProvId: nb.id });
       }
@@ -59,12 +68,15 @@ export function buildFrontlineOrder(ownerTag: string, targetTag: string): Frontl
   return { targetTag, friendlyProvIds: ordered, borderPairs };
 }
 
-/** Partition owner's provinces into overland-connected components (e.g. Germany mainland vs East Prussia). */
-function getFriendlyComponentMap(ownerTag: string): Map<number, number> {
+/** Partition owner's provinces into overland-connected components using live controllers. */
+function getFriendlyComponentMap(
+  ownerTag: string,
+  getController: ControllerResolver = defaultController,
+): Map<number, number> {
   const comp = new Map<number, number>();
   let cid = 0;
-  for (const p of getOwnerProvinces(ownerTag)) {
-    if (comp.has(p.id)) continue;
+  for (const p of SIM_PROVINCES) {
+    if (getController(p.id) !== ownerTag || comp.has(p.id)) continue;
     const q = [p.id];
     comp.set(p.id, cid);
     while (q.length > 0) {
@@ -72,7 +84,7 @@ function getFriendlyComponentMap(ownerTag: string): Map<number, number> {
       for (const nbId of cur.neighbors) {
         if (comp.has(nbId)) continue;
         const nb = getSimProvince(nbId);
-        if (nb && nb.owner === ownerTag) {
+        if (nb && getController(nb.id) === ownerTag) {
           comp.set(nbId, cid);
           q.push(nbId);
         }
@@ -91,12 +103,13 @@ export function computeFrontlineAssignments(
   frontline: FrontlineOrder,
   armyBrigades: readonly BrigadeState[],
   ownerTag: string,
+  getController: ControllerResolver = defaultController,
 ): Map<number, number> {
   const assignments = new Map<number, number>();
-  const eligible = armyBrigades.filter((b) => !b.manualOverride);
+  const eligible = armyBrigades.filter((b) => !b.manualOverride && b.inCombatBattleId === null && !b.retreating);
   if (eligible.length === 0 || frontline.friendlyProvIds.length === 0) return assignments;
 
-  const compMap = getFriendlyComponentMap(ownerTag);
+  const compMap = getFriendlyComponentMap(ownerTag, getController);
   const provsByComp = new Map<number, number[]>();
   for (const pid of frontline.friendlyProvIds) {
     const c = compMap.get(pid) ?? -1;
@@ -158,12 +171,14 @@ export function buildOffensiveArrowOrder(
   targetProvId: number,
   bendOffsetX?: number,
   bendOffsetY?: number,
+  getController: ControllerResolver = defaultController,
 ): OffensiveArrowOrder | null {
   const target = getSimProvince(targetProvId);
-  if (!target || target.owner === army.owner) return null;
+  const targetCtrl = target ? getController(target.id) : '';
+  if (!target || targetCtrl === army.owner) return null;
 
   let resolvedStart = startProvId;
-  if (resolvedStart === null || getSimProvince(resolvedStart)?.owner !== army.owner) {
+  if (resolvedStart === null || getController(resolvedStart) !== army.owner) {
     const candidates = army.frontline?.friendlyProvIds ?? [];
     if (candidates.length === 0) return null;
     resolvedStart = [...candidates].sort((a, b) => {
@@ -173,19 +188,20 @@ export function buildOffensiveArrowOrder(
     })[0]!;
   }
 
-  // Compute planning waypoint chain across target nation (strictly for arrow geometry, zero combat)
+  // Compute planning waypoint chain across target nation (strictly for arrow geometry & execution)
   const plan = findLandPath({
     startProvId: resolvedStart,
     goalProvId: targetProvId,
     ownerTag: army.owner,
     speedTenth: BRIGADE_TEMPLATES.INF.speedTenth,
-    hostileTags: new Set([target.owner]),
+    hostileTags: new Set([targetCtrl]),
+    getController,
   });
 
   return {
     id,
     armyId: army.id,
-    targetTag: target.owner,
+    targetTag: targetCtrl,
     startProvId: resolvedStart,
     targetProvId,
     waypointProvIds: plan ? [resolvedStart, ...plan.path] : [resolvedStart, targetProvId],
