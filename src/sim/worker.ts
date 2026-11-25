@@ -66,7 +66,13 @@ function emitSnapshot(forceFull = false): void {
       type: 'SNAPSHOT',
       buffer: buf,
       ...(sendDispatches ? { dispatches } : {}),
-      ...(sendIndustry ? { industry: engine.getIndustrySnapshot() } : {}),
+      ...(sendIndustry
+        ? {
+            industry: engine.getIndustrySnapshot(),
+            governance: engine.getGovernanceSnapshot(),
+            tech: engine.getTechSnapshot(),
+          }
+        : {}),
     },
     [buf],
   );

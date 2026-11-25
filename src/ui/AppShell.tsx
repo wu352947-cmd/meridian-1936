@@ -5,6 +5,7 @@ import { CreditsModal } from './CreditsModal';
 import { ProvinceInfoCard } from './ProvinceInfoCard';
 import { ScenarioSelectModal } from './ScenarioSelectModal';
 import { RightDossierDrawer } from './drawers/RightDossierDrawer';
+import { TechBlueprintModal } from './modals/TechBlueprintModal';
 import { BottomCommandDock } from './hud/BottomCommandDock';
 import { DispatchTicker } from './hud/DispatchTicker';
 import { TopLeftNationBrief } from './hud/TopLeftNationBrief';
@@ -166,6 +167,11 @@ export function AppShell({ actions }: Props) {
           )}
 
           <RightDossierDrawer actions={actions} onClose={() => actions.toggleDrawer(null)} />
+          <TechBlueprintModal
+            open={drawer === 'tech'}
+            onClose={() => actions.toggleDrawer(null)}
+            actions={actions}
+          />
 
           <ProvinceInfoCard
             hovered={hovered}

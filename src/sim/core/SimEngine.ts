@@ -7,14 +7,17 @@ import { clampInt, FIXED_SCALE, mulFixed } from './FixedMath';
 import {
   CommandQueue,
   type CancelConstructionPayload,
+  type CancelResearchPayload,
   type GameCommand,
   type InitScenarioPayload,
   type QueueConstructionPayload,
   type ReorderConstructionPayload,
   type SelectCountryPayload,
   type SetDatePayload,
+  type SetGovernanceLawPayload,
   type SetLineFactoriesPayload,
   type SetSpeedPayload,
+  type StartResearchPayload,
   type SwitchProductionLinePayload,
   type ToggleAutoTradePayload,
   type TogglePausePayload,
@@ -22,8 +25,14 @@ import {
 import { SeededRng } from './SeededRng';
 import type { SimNationSnapshot, WorldSnapshot } from './SnapshotCodec';
 import { ALL_PLAYABLE_NATIONS_1936, isPlayableTag } from '../data/nations1936';
-import { IndustrySystem } from '../systems/industrySystem';
+import { GovernanceSystem } from '../systems/governanceSystem';
+import type { GovernanceSnapshot } from '../systems/governanceTypes';
+import { IndustrySystem, type IndustryLawTechMods } from '../systems/industrySystem';
 import { BUILDING_SPECS, type IndustrySnapshot } from '../systems/industryTypes';
+import { ManpowerSystem } from '../systems/manpowerSystem';
+import { ALL_MODIFIER_KEYS, createEmptyModifiers, type NationModifiers } from '../systems/modifierTypes';
+import { TechSystem } from '../systems/techSystem';
+import type { TechSnapshot } from '../systems/techTypes';
 
 export interface TickerDispatch {
   id: number;
@@ -49,6 +58,9 @@ export class SimEngine {
   private nations: SimNationSnapshot[] = [];
   private readonly commands = new CommandQueue();
   private readonly industry = new IndustrySystem();
+  private readonly governance = new GovernanceSystem();
+  private readonly manpower = new ManpowerSystem();
+  private readonly tech = new TechSystem();
   private dispatches: TickerDispatch[] = [];
   private nextDispatchId = 1;
   private industryRevision = 1;
@@ -66,7 +78,10 @@ export class SimEngine {
     this.playerTag = isPlayableTag(opts.countryTag) ? opts.countryTag : 'GER';
     this.speed = opts.speed ?? 2;
     this.paused = opts.paused ?? true;
-    this.crisisPermille = 50;
+    this.crisisPermille =
+      typeof opts.crisisPermille === 'number'
+        ? clampInt(opts.crisisPermille, 0, FIXED_SCALE)
+        : 50;
     this.seqNo = 0;
     this.commands.clear();
     this.dispatches = [];
@@ -96,7 +111,31 @@ export class SimEngine {
       };
     });
 
-    this.industry.reset(this.getCohesionMap());
+    const playerNation = this.findNation(this.playerTag);
+    if (playerNation) {
+      if (typeof opts.playerAp === 'number') {
+        playerNation.apPermille = clampInt(Math.round(opts.playerAp * FIXED_SCALE), 0, 999 * FIXED_SCALE);
+      }
+      if (typeof opts.playerMobilizationPermille === 'number') {
+        playerNation.readinessPermille = clampInt(opts.playerMobilizationPermille, 0, FIXED_SCALE);
+      }
+    }
+
+    this.governance.reset();
+    this.governance.setWarFlags(this.playerTag, {
+      atWar: opts.playerAtWar,
+      atWarWithMajor: opts.playerAtWarWithMajor,
+      homelandInvaded: opts.playerHomelandInvaded,
+      armyInferior: opts.playerArmyInferior,
+    });
+
+    this.tech.reset(tickToDate(this.tick).year, (tag) => this.getCombinedModifiers(tag).research_speed);
+    this.manpower.reset((tag) => ({
+      baseRatePermille: this.governance.getBaseConscriptionPermille(tag),
+      rateModifierPermille: this.getCombinedModifiers(tag).conscription_rate,
+    }));
+
+    this.industry.reset(this.getCohesionMap(), this.buildIndustryModsMap());
     if (typeof opts.autoTrade === 'boolean') {
       this.industry.toggleAutoTrade(this.playerTag, opts.autoTrade, this.getCohesionMap());
     }
@@ -106,10 +145,23 @@ export class SimEngine {
         this.industry.queueConstruction(this.playerTag, item.regionId, item.building, coh);
       }
     }
-    this.syncNationsFromIndustry();
-    this.industryRevision += 1;
 
+    this.syncNationsFromSystems();
     this.pushDispatch('info', '1936 欧洲参谋部总图就绪，等待签批指令。', this.playerTag);
+
+    if (opts.initialLaws && opts.initialLaws.length > 0) {
+      for (const item of opts.initialLaws) {
+        this.applyLawSwitch(this.playerTag, item.slot, item.lawId);
+      }
+    }
+    if (opts.initialResearch && opts.initialResearch.length > 0) {
+      const yr = tickToDate(this.tick).year;
+      for (const techId of opts.initialResearch) {
+        this.tech.startResearch(this.playerTag, techId, yr, this.getCombinedModifiers(this.playerTag).research_speed);
+      }
+    }
+
+    this.industryRevision += 1;
 
     if (opts.startDate) {
       const targetTick = dateStringToTick(opts.startDate);
@@ -152,17 +204,39 @@ export class SimEngine {
   }
 
   private onDailyBoundary(): void {
+    const prevYear = tickToDate(Math.max(0, this.tick - TICKS_PER_DAY)).year;
+    const d = tickToDate(this.tick);
     // Advance deterministic RNG stream every day for reproducible future events
     const roll = this.rng.nextPermille();
     for (const nation of this.nations) {
+      const cap = clampInt(FIXED_SCALE + this.getCombinedModifiers(nation.tag).cohesion_cap, 100, FIXED_SCALE);
+      if (nation.cohesionPermille > cap) nation.cohesionPermille = cap;
       const dailyAp = this.calcDailyAp(nation.cohesionPermille);
       nation.apDailyPermille = dailyAp;
       nation.apPermille = clampInt(nation.apPermille + dailyAp, 0, 999 * FIXED_SCALE);
     }
 
+    // Batch 04 daily manpower smooth inflow & tech research progress + Jan 1 New Year rate recalc
+    this.manpower.stepDaily((tag) => ({
+      baseRatePermille: this.governance.getBaseConscriptionPermille(tag),
+      rateModifierPermille: this.getCombinedModifiers(tag).conscription_rate,
+    }));
+
+    const doneTechs = this.tech.stepDaily(prevYear, (tag) => this.getCombinedModifiers(tag).research_speed);
+    if (doneTechs.length > 0) {
+      this.industry.setNationModifiers(this.buildIndustryModsMap(), this.getCohesionMap());
+      for (const ev of doneTechs) {
+        if (ev.tag === this.playerTag) {
+          this.pushDispatch('info', `科研竣工：《${ev.nameZh}》（${ev.effectSummaryZh}）`, ev.tag);
+        }
+      }
+    }
+    // Recalculate all active slot speeds immediately on new day / New Year's Day (元旦)
+    this.tech.recomputeAllRates(d.year, (tag) => this.getCombinedModifiers(tag).research_speed);
+
     // Batch 03 daily industrial production, construction & auto-trade settlement
     const completed = this.industry.stepDaily(this.getCohesionMap());
-    this.syncNationsFromIndustry();
+    this.syncNationsFromSystems();
     this.industryRevision += 1;
     for (const ev of completed) {
       if (ev.tag === this.playerTag) {
@@ -171,7 +245,6 @@ export class SimEngine {
       }
     }
 
-    const d = tickToDate(this.tick);
     if (d.year === 1936 && d.month === 3 && d.day === 7) {
       this.crisisPermille = clampInt(this.crisisPermille + 50, 0, FIXED_SCALE);
       this.pushDispatch('alert', '莱茵兰非军事区监测到部队调动', 'GER');
@@ -181,22 +254,96 @@ export class SimEngine {
     }
   }
 
+  private findNation(tag: string): SimNationSnapshot | undefined {
+    return this.nations.find((n) => n.tag === tag);
+  }
+
+  getCombinedModifiers(tag: string): NationModifiers {
+    const out = createEmptyModifiers();
+    const law = this.governance.getLawModifiers(tag);
+    const tech = this.tech.getTechModifiers(tag);
+    for (const k of ALL_MODIFIER_KEYS) {
+      out[k] = (law[k] + tech[k]) | 0;
+    }
+    return out;
+  }
+
+  private buildIndustryModsMap(): Map<string, IndustryLawTechMods> {
+    const map = new Map<string, IndustryLawTechMods>();
+    for (const n of this.nations) {
+      const g = this.governance.getState(n.tag);
+      const m = this.getCombinedModifiers(n.tag);
+      map.set(n.tag, {
+        economyLaw: g.economyLaw,
+        exportSharePermille: this.governance.getExportSharePermille(n.tag),
+        factoryOutputModPermille: m.factory_output,
+        milOutputModPermille: m.mil_output,
+        buildSpeedModPermille: m.build_speed,
+        milBuildSpeedModPermille: m.mil_build_speed,
+        synthBuildSpeedModPermille: m.synth_build_speed,
+        masteryCapModPermille: m.mastery_cap,
+        regionSlotBonus: m.region_slots,
+        synthOilPerPlant: m.synth_oil_per_plant,
+      });
+    }
+    return map;
+  }
+
+  private applyLawSwitch(
+    actorTag: string,
+    slot: SetGovernanceLawPayload['slot'],
+    lawId: SetGovernanceLawPayload['lawId'],
+  ): boolean {
+    const nation = this.findNation(actorTag);
+    if (!nation) return false;
+    const res = this.governance.switchLaw(
+      actorTag,
+      slot,
+      lawId,
+      nation.apPermille,
+      this.crisisPermille,
+      nation.readinessPermille,
+    );
+    if (!res.ok) return false;
+
+    nation.apPermille = Math.max(0, nation.apPermille - (res.apCostFixed ?? 0));
+    const mods = this.getCombinedModifiers(actorTag);
+    const cap = clampInt(FIXED_SCALE + mods.cohesion_cap, 100, FIXED_SCALE);
+    if (nation.cohesionPermille > cap) {
+      nation.cohesionPermille = cap;
+      nation.apDailyPermille = this.calcDailyAp(nation.cohesionPermille);
+    }
+
+    this.manpower.syncRates(actorTag, this.governance.getBaseConscriptionPermille(actorTag), mods.conscription_rate);
+    this.tech.recomputeNationRates(actorTag, tickToDate(this.tick).year, mods.research_speed);
+    this.industry.setNationModifiers(this.buildIndustryModsMap(), this.getCohesionMap());
+    this.syncNationsFromSystems();
+    this.industryRevision += 1;
+
+    if (actorTag === this.playerTag) {
+      this.pushDispatch('info', `政务法令签批：${res.slotLabelZh}切换为「${res.lawNameZh}」（${res.summaryZh}）`, actorTag);
+    }
+    return true;
+  }
+
   private getCohesionMap(): Map<string, number> {
     const map = new Map<string, number>();
     for (const n of this.nations) map.set(n.tag, n.cohesionPermille);
     return map;
   }
 
-  private syncNationsFromIndustry(): void {
+  private syncNationsFromSystems(): void {
     for (const n of this.nations) {
       const s = this.industry.getNationSummary(n.tag);
-      if (!s) continue;
-      n.civ = s.civ;
-      n.mil = s.mil;
-      n.doc = s.doc;
-      n.steelNet = s.steelNet;
-      n.oilNet = s.oilNet;
-      n.rareNet = s.rareNet;
+      if (s) {
+        n.civ = s.civ;
+        n.mil = s.mil;
+        n.doc = s.doc;
+        n.steelNet = s.steelNet;
+        n.oilNet = s.oilNet;
+        n.rareNet = s.rareNet;
+      }
+      n.manpowerK = this.manpower.getAvailableManpowerK(n.tag);
     }
   }
 
@@ -256,7 +403,7 @@ export class SimEngine {
         const { regionId, building } = cmd.payload as QueueConstructionPayload;
         const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
         if (this.industry.queueConstruction(actor, regionId, building, this.getCohesionMap())) {
-          this.syncNationsFromIndustry();
+          this.syncNationsFromSystems();
           this.industryRevision += 1;
         }
         break;
@@ -265,7 +412,7 @@ export class SimEngine {
         const { projectId } = cmd.payload as CancelConstructionPayload;
         const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
         if (this.industry.cancelConstruction(actor, projectId, this.getCohesionMap())) {
-          this.syncNationsFromIndustry();
+          this.syncNationsFromSystems();
           this.industryRevision += 1;
         }
         break;
@@ -274,7 +421,7 @@ export class SimEngine {
         const { projectId, direction } = cmd.payload as ReorderConstructionPayload;
         const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
         if (this.industry.reorderConstruction(actor, projectId, direction, this.getCohesionMap())) {
-          this.syncNationsFromIndustry();
+          this.syncNationsFromSystems();
           this.industryRevision += 1;
         }
         break;
@@ -283,7 +430,7 @@ export class SimEngine {
         const { eqType, factories } = cmd.payload as SetLineFactoriesPayload;
         const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
         if (this.industry.setLineFactories(actor, eqType, factories, this.getCohesionMap())) {
-          this.syncNationsFromIndustry();
+          this.syncNationsFromSystems();
           this.industryRevision += 1;
         }
         break;
@@ -292,7 +439,7 @@ export class SimEngine {
         const { fromType, toType, count } = cmd.payload as SwitchProductionLinePayload;
         const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
         if (this.industry.switchProductionLine(actor, fromType, toType, count, this.getCohesionMap())) {
-          this.syncNationsFromIndustry();
+          this.syncNationsFromSystems();
           this.industryRevision += 1;
         }
         break;
@@ -301,8 +448,31 @@ export class SimEngine {
         const { enabled } = cmd.payload as ToggleAutoTradePayload;
         const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
         this.industry.toggleAutoTrade(actor, enabled, this.getCohesionMap());
-        this.syncNationsFromIndustry();
+        this.syncNationsFromSystems();
         this.industryRevision += 1;
+        break;
+      }
+      case 'SET_GOVERNANCE_LAW': {
+        const { slot, lawId } = cmd.payload as SetGovernanceLawPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        this.applyLawSwitch(actor, slot, lawId);
+        break;
+      }
+      case 'START_RESEARCH': {
+        const { techId, slotIndex } = cmd.payload as StartResearchPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        const bonus = this.getCombinedModifiers(actor).research_speed;
+        if (this.tech.startResearch(actor, techId, tickToDate(this.tick).year, bonus, slotIndex)) {
+          this.industryRevision += 1;
+        }
+        break;
+      }
+      case 'CANCEL_RESEARCH': {
+        const { slotIndex } = cmd.payload as CancelResearchPayload;
+        const actor = isPlayableTag(cmd.actorTag) ? cmd.actorTag : this.playerTag;
+        if (this.tech.cancelResearch(actor, slotIndex)) {
+          this.industryRevision += 1;
+        }
         break;
       }
     }
@@ -349,6 +519,9 @@ export class SimEngine {
       mix(n.steelNet ^ (n.oilNet << 8) ^ (n.rareNet << 16));
     }
     this.industry.mixHash(mix);
+    this.governance.mixHash(mix);
+    this.manpower.mixHash(mix);
+    this.tech.mixHash(mix);
     return h >>> 0;
   }
 
@@ -383,5 +556,44 @@ export class SimEngine {
 
   getIndustrySnapshot(tag = this.playerTag): IndustrySnapshot {
     return this.industry.getSnapshotFor(tag);
+  }
+
+  getGovernanceSnapshot(tag = this.playerTag): GovernanceSnapshot {
+    const nation = this.findNation(tag) ?? this.nations[0]!;
+    const g = this.governance.getState(nation.tag);
+    const m = this.getCombinedModifiers(nation.tag);
+    return {
+      tag: nation.tag,
+      economyLaw: g.economyLaw,
+      conscriptionLaw: g.conscriptionLaw,
+      tradeLaw: g.tradeLaw,
+      apPermille: nation.apPermille,
+      apDailyPermille: nation.apDailyPermille,
+      crisisPermille: this.crisisPermille,
+      readinessPermille: nation.readinessPermille,
+      cohesionCapPermille: clampInt(FIXED_SCALE + m.cohesion_cap, 100, FIXED_SCALE),
+      atWar: g.atWar,
+      atWarWithMajor: g.atWarWithMajor,
+      homelandInvaded: g.homelandInvaded,
+      armyInferior: g.armyInferior,
+      exportSharePermille: this.governance.getExportSharePermille(nation.tag),
+      researchSpeedBonusPermille: m.research_speed,
+      factoryOutputModPermille: m.factory_output,
+      milOutputModPermille: m.mil_output,
+      buildSpeedModPermille: m.build_speed,
+      milBuildSpeedModPermille: m.mil_build_speed,
+      masteryCapModPermille: m.mastery_cap,
+      regionSlotBonus: m.region_slots,
+      synthOilBonusPerPlant: m.synth_oil_per_plant,
+      manpower: this.manpower.getSnapshotFor(nation.tag),
+      economyOptions: this.governance.buildOptionsStatus(nation.tag, 'economy', nation.apPermille, this.crisisPermille, nation.readinessPermille),
+      conscriptionOptions: this.governance.buildOptionsStatus(nation.tag, 'conscription', nation.apPermille, this.crisisPermille, nation.readinessPermille),
+      tradeOptions: this.governance.buildOptionsStatus(nation.tag, 'trade', nation.apPermille, this.crisisPermille, nation.readinessPermille),
+    };
+  }
+
+  getTechSnapshot(tag = this.playerTag): TechSnapshot {
+    const bonus = this.getCombinedModifiers(tag).research_speed;
+    return this.tech.getSnapshotFor(tag, tickToDate(this.tick).year, bonus);
   }
 }

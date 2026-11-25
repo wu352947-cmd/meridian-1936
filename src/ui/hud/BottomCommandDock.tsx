@@ -1,7 +1,13 @@
 import type { DrawerTab } from '../../debug/urlHarness';
 import type { MapMode } from '../../types/map';
 import { mapModeSig } from '../mapStore';
-import { activeDrawerSig, autotestModeSig, type AppActions } from '../store/simStore';
+import {
+  activeDrawerSig,
+  autotestModeSig,
+  simGovernanceSig,
+  simTechSig,
+  type AppActions,
+} from '../store/simStore';
 
 interface Props {
   actions: AppActions;
@@ -40,12 +46,21 @@ export function BottomCommandDock({ actions }: Props) {
   const activeDrawer = activeDrawerSig.value;
   const activeMode = mapModeSig.value;
   const noAnim = autotestModeSig.value;
+  const gov = simGovernanceSig.value;
+  const tech = simTechSig.value;
+  const hasLawReady = gov
+    ? [...gov.economyOptions, ...gov.conscriptionOptions, ...gov.tradeOptions].some((o) => o.canSwitch)
+    : false;
+  const hasIdleTechSlot = tech ? tech.slots.some((s) => s.techId === null) : true;
 
   return (
     <nav class="walnut-dock" aria-label="参谋部公文卷宗坞站与地图透镜">
       <div class="dock-tabs" role="tablist" aria-label="F1-F6 参谋卷宗">
         {DOSSIER_TABS.map((t) => {
           const active = activeDrawer === t.id;
+          const showDot =
+            !active &&
+            ((t.id === 'directives' && hasLawReady) || (t.id === 'tech' && hasIdleTechSlot));
           return (
             <button
               key={t.id}
@@ -58,7 +73,7 @@ export function BottomCommandDock({ actions }: Props) {
             >
               <span class="tab-fkey mono-num">{t.fkey}</span>
               <span class="tab-label">{t.label}</span>
-              {t.hasAmberHint && !active && (
+              {showDot && (
                 <span class={`tab-amber-dot${noAnim ? ' static' : ''}`} aria-hidden="true" />
               )}
             </button>

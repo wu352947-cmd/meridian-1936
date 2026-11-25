@@ -3,6 +3,7 @@
  * Pure JSON-serializable payloads for replayability and desync-free simulation.
  */
 import type { SimSpeed } from './ClockCalendar';
+import type { GovernanceLawId, GovernanceSlot } from '../systems/governanceTypes';
 import type { BuildingType, EquipmentType } from '../systems/industryTypes';
 
 export type CommandType =
@@ -16,7 +17,10 @@ export type CommandType =
   | 'REORDER_CONSTRUCTION'
   | 'SET_LINE_FACTORIES'
   | 'SWITCH_PRODUCTION_LINE'
-  | 'TOGGLE_AUTO_TRADE';
+  | 'TOGGLE_AUTO_TRADE'
+  | 'SET_GOVERNANCE_LAW'
+  | 'START_RESEARCH'
+  | 'CANCEL_RESEARCH';
 
 export interface InitScenarioPayload {
   scenarioId: '1936';
@@ -27,6 +31,15 @@ export interface InitScenarioPayload {
   speed?: SimSpeed;
   autoTrade?: boolean;
   initialQueue?: Array<{ regionId: number; building: BuildingType }>;
+  crisisPermille?: number;
+  playerAp?: number;
+  playerMobilizationPermille?: number;
+  playerAtWar?: boolean;
+  playerAtWarWithMajor?: boolean;
+  playerHomelandInvaded?: boolean;
+  playerArmyInferior?: boolean;
+  initialLaws?: Array<{ slot: GovernanceSlot; lawId: GovernanceLawId }>;
+  initialResearch?: string[];
 }
 
 export interface SelectCountryPayload {
@@ -74,6 +87,20 @@ export interface ToggleAutoTradePayload {
   enabled?: boolean;
 }
 
+export interface SetGovernanceLawPayload {
+  slot: GovernanceSlot;
+  lawId: GovernanceLawId;
+}
+
+export interface StartResearchPayload {
+  techId: string;
+  slotIndex?: number;
+}
+
+export interface CancelResearchPayload {
+  slotIndex: number;
+}
+
 export type GameCommandPayload =
   | InitScenarioPayload
   | SelectCountryPayload
@@ -85,7 +112,10 @@ export type GameCommandPayload =
   | ReorderConstructionPayload
   | SetLineFactoriesPayload
   | SwitchProductionLinePayload
-  | ToggleAutoTradePayload;
+  | ToggleAutoTradePayload
+  | SetGovernanceLawPayload
+  | StartResearchPayload
+  | CancelResearchPayload;
 
 export interface GameCommand<T extends CommandType = CommandType> {
   tick: number;

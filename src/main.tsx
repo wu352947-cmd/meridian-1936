@@ -5,6 +5,9 @@ import './ui/styles/dossierTray.css';
 import './ui/styles/hudTop.css';
 import './ui/styles/hudDock.css';
 import './ui/styles/industryDrawer.css';
+import './ui/styles/governanceDrawer.css';
+import './ui/styles/techBlueprint.css';
+import './ui/styles/techBlueprintNodes.css';
 
 import { render } from 'preact';
 import { loadMeridianFonts } from './assets/loadFonts';
@@ -120,6 +123,15 @@ async function bootstrap(): Promise<void> {
     toggleAutoTrade: (enabled) => {
       sim?.toggleAutoTrade(enabled);
     },
+    setGovernanceLaw: (slot, lawId) => {
+      sim?.setGovernanceLaw(slot, lawId);
+    },
+    startResearch: (techId, slotIndex) => {
+      sim?.startResearch(techId, slotIndex);
+    },
+    cancelResearch: (slotIndex) => {
+      sim?.cancelResearch(slotIndex);
+    },
   };
 
   const uiRoot = document.getElementById('ui-root');
@@ -129,8 +141,8 @@ async function bootstrap(): Promise<void> {
 
   try {
     sim = new SimClient({
-      onSnapshot: (snap, dispatches, industry) => {
-        applyWorldSnapshot(snap, dispatches, industry);
+      onSnapshot: (snap, dispatches, industry, governance, tech) => {
+        applyWorldSnapshot(snap, dispatches, industry, governance, tech);
         if (industry && stage) {
           stage.updateIndustryRegions(industry.regions);
         }
@@ -153,6 +165,15 @@ async function bootstrap(): Promise<void> {
         speed: initialSpeed,
         autoTrade: harness.autotrade ?? undefined,
         initialQueue: harness.queue.length > 0 ? harness.queue : undefined,
+        crisisPermille: harness.crisisPermille ?? undefined,
+        playerAp: harness.ap ?? undefined,
+        playerMobilizationPermille: harness.mobilizationPermille ?? undefined,
+        playerAtWar: harness.atWar || undefined,
+        playerAtWarWithMajor: harness.atWarMajor || undefined,
+        playerHomelandInvaded: harness.homelandInvaded || undefined,
+        playerArmyInferior: harness.armyInferior || undefined,
+        initialLaws: harness.laws.length > 0 ? harness.laws : undefined,
+        initialResearch: harness.research.length > 0 ? harness.research : undefined,
       }),
     ]);
 

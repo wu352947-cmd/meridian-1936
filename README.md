@@ -1,13 +1,14 @@
 # 《子午线 1936：碎裂大陆》（Meridian 1936）
 
-基于 **Vite + TypeScript (strict) + PixiJS v8 + Preact (`@preact/signals`) + Web Worker** 构建的 1936 欧洲历史大战略网页工程（当前已完成 **Batch 01 交互参谋地图**、**Batch 02 确定性 Worker 时钟与三锚点 HUD** 及 **Batch 03 工业建设、军需产线与自动贸易闭环**）。
+基于 **Vite + TypeScript (strict) + PixiJS v8 + Preact (`@preact/signals`) + Web Worker** 构建的 1936 欧洲历史大战略网页工程（当前已完成 **Batch 01 交互参谋地图**、**Batch 02 确定性 Worker 时钟与三锚点 HUD**、**Batch 03 工业建设与自动贸易** 及 **Batch 04 人力动员、三槽政务法令与蓝晒工程科技树**）。
 
 ## 核心特性
 - **1936 欧洲参谋部亚麻制图（Batch 01）**：由公有领域 Natural Earth 经 LAEA 欧洲等积投影编译 **676 陆地省 + 62 海区**，GPU LUT 片元着色器 + 4 级语义缩放 LOD + 沿国土主脊贝塞尔弯曲国名 + O(1) 像素拾取。
 - **确定性 Web Worker 时钟与双缓冲通信（Batch 02）**：`src/sim/` 纯 TS 零 DOM 依赖，采用千分比定点数 `FixedMath`、`sfc32` 确定性 PRNG、6 小时 Tick 日历（每日 4 跳：晨/午/昏/夜）与 `32 KB × 2` 双缓冲 `Transferable ArrayBuffer` 乒乓快照（不依赖 `SharedArrayBuffer`，原生兼容 GitHub Pages）。
 - **《1936 欧洲参谋部国情档案袋》选国流程（Batch 02）**：8 大推荐国卡槽 + 31 国名录 + 背景地图点选全部 31 个 1936 欧洲主权国家开局；原创中性合规 SVG 国旗、首都地标版画剪影与五维综合国力简条（零领袖肖像、零违禁符号）。
 - **原创“三锚点参谋桌面”HUD（Batch 02）**：顶栏双翼分体简报笺（中央留白、JetBrains Mono `tabular-nums` 等宽对齐、半圆欧洲危机度表盘与电报流水纸带）、底部居中胡桃木坞站（`F1–F6` 卷宗夹签 + `M1–M6` 地图模式透镜）与单一右侧 380px 上下文抽屉；全覆盖层指针穿透不阻挡地图缩放拖拽。
-- **工业建设、7 类军需产线与战略资源自动贸易（Batch 03）**：聚类生成 **143 个行政工业区**（建筑槽、1–5 级基建、钢/油/稀产区）；每日确定性结算 `CIV/MIL/DOC/基建/合成炼油所` 工程队列（35% 民用消费品守恒）、7 类通用军需产线熟练度爬升（30%→75%）与缺料惩罚、自动资源进口撮合；实装 `[F3 军工与工程调度]` 380px 抽屉、省份卡快建、`M5` 工业资源气泡与地图施工斜纹/进度浮标。
+- **工业建设、7 类军需产线与战略资源自动贸易（Batch 03）**：聚类生成 **143 个行政工业区**（建筑槽、1–5 级基建、钢/油/稀产区）；每日确定性结算 `CIV/MIL/DOC/基建/合成炼油所` 工程队列（消费品守恒）、7 类通用军需产线熟练度爬升（30%→75%，科技最高至 100%）与缺料惩罚、自动资源进口撮合；实装 `[F3 军工与工程调度]` 380px 抽屉、省份卡快建、`M5` 工业资源气泡与地图施工斜纹/进度浮标。
+- **人力动员、三槽政务法令与蓝晒工程科技树（Batch 04）**：143 行政区核心/非核心（×12%）适役人力池与每月 `+0.4%` 总人口平滑动员流入；每日 `+2.0` 基础行政点 AP 驱动经济动员（4 级）、兵役征召（4 级）与战略贸易（3 级，联动自动贸易出口配额）三槽法令切换（`100 AP/次`），实装 `[F1 内政与政务法令]` 抽屉；内置 **36 节点**普鲁士蓝晒风格（`#142B42`/`#E6F2FF`）`[F4 蓝晒工程科技图谱]` 中央模态窗，支持 2–4 并行科研槽、跨年超前惩罚（`+100%/年`）与元旦自动重算速率，工业科技完成后实时生效。
 - **开源合规与字体子集**：霞鹜文楷屏幕阅读版、思源黑体、JetBrains Mono、Cinzel（均为 SIL OFL 1.1）按字符集子集化为 WOFF2；全部资产登记于 [CREDITS.md](CREDITS.md) 与 `public/assets/ASSET_LICENSES.json`。
 
 ## 快速运行
@@ -38,6 +39,7 @@ npm test
   - 直入主界面设定国家与日期：`?autotest=1&scenario=1936&country=FRA&date=1936-03-15`
   - 展开指定抽屉与暂停：`?autotest=1&scenario=1936&country=GER&date=1936-01-01&paused=1&panel=industry`
   - 工业施工与贸易调试：`?autotest=1&scenario=1936&country=GER&panel=industry&subtab=construction|trade&mapmode=industry&queue=4:MIL,1:CIV&autotrade=1`
+  - 法令与蓝晒科技调试：`?autotest=1&scenario=1936&country=GBR&panel=tech&research=machine_tools_1,medium_tank_1939` 或 `?autotest=1&scenario=1936&country=GER&panel=directives&crisis=20&ap=150&mobilization=55&atWar=1&laws=economy:early_mob`
   - 地图与视角调试：`?autotest=1&mapmode=political|terrain|supply|diplomacy|industry|air_sea&cam=x,y,zoom&selectProv=<id>&hoverProv=<id>`
 - **无头截图（SwiftShader 1440×900）**：
   ```bash

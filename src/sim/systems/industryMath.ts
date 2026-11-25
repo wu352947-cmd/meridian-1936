@@ -18,12 +18,18 @@ export function calcConsumerGoodsCiv(totalCiv: number, consumerGoodsPermille: nu
   return clampInt(raw, 0, totalCiv);
 }
 
-/** Daily construction CP (fixed x1000) for assigned CIV in a region of infra 1..5. */
-export function calcDailyCpFixed(assignedCiv: number, infraLevel: number): number {
+/** Daily construction CP (fixed x1000) for assigned CIV in a region of infra 1..5 with speed modifier. */
+export function calcDailyCpFixed(
+  assignedCiv: number,
+  infraLevel: number,
+  speedMultPermille = FIXED_SCALE,
+): number {
   if (assignedCiv <= 0) return 0;
   const lvl = clampInt(infraLevel, 1, 5);
   const mult = INFRA_MULT_PERMILLE[lvl] ?? FIXED_SCALE;
-  return assignedCiv * mulFixed(BASE_CP_PER_CIV_FIXED, mult);
+  const perCiv = mulFixed(BASE_CP_PER_CIV_FIXED, mult);
+  const clampedSpeed = clampInt(speedMultPermille, 200, 3000);
+  return assignedCiv * mulFixed(perCiv, clampedSpeed);
 }
 
 /**

@@ -1,4 +1,11 @@
 import type { SimSpeed } from '../sim/core/ClockCalendar';
+import {
+  CONSCRIPTION_LAW_SPECS,
+  ECONOMY_LAW_SPECS,
+  TRADE_LAW_SPECS,
+  type GovernanceLawId,
+  type GovernanceSlot,
+} from '../sim/systems/governanceTypes';
 import type { BuildingType } from '../sim/systems/industryTypes';
 import type { MapMode } from '../types/map';
 
@@ -19,6 +26,15 @@ export interface UrlHarnessParams {
   subtab: IndustrySubTab | null;
   autotrade: boolean | null;
   queue: Array<{ regionId: number; building: BuildingType }>;
+  crisisPermille: number | null;
+  ap: number | null;
+  mobilizationPermille: number | null;
+  atWar: boolean;
+  atWarMajor: boolean;
+  homelandInvaded: boolean;
+  armyInferior: boolean;
+  laws: Array<{ slot: GovernanceSlot; lawId: GovernanceLawId }>;
+  research: string[];
   mapmode: MapMode;
   cam: { x: number; y: number; zoom: number } | null;
   selectProv: number | null;
@@ -138,6 +154,45 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
+  const parseNonNegNum = (v: string | null): number | null => {
+    if (v === null || v.trim() === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+
+  const crisisPct = parseNonNegNum(sp.get('crisis'));
+  const crisisPermille = crisisPct !== null ? Math.min(1000, Math.round(crisisPct * 10)) : null;
+  const ap = parseNonNegNum(sp.get('ap'));
+  const mobPct = parseNonNegNum(sp.get('mobilization'));
+  const mobilizationPermille = mobPct !== null ? Math.min(1000, Math.round(mobPct * 10)) : null;
+  const isFlag = (k: string): boolean => {
+    const v = sp.get(k);
+    return v === '1' || v === 'true';
+  };
+
+  const laws: Array<{ slot: GovernanceSlot; lawId: GovernanceLawId }> = [];
+  const rawLaws = sp.get('laws') ?? sp.get('law');
+  if (rawLaws) {
+    for (const part of rawLaws.split(',')) {
+      const cleaned = part.trim();
+      if (!cleaned) continue;
+      const pieces = cleaned.split(':');
+      const lawId = (pieces.length === 2 ? pieces[1] : pieces[0])!.trim() as GovernanceLawId;
+      if (lawId in ECONOMY_LAW_SPECS) laws.push({ slot: 'economy', lawId });
+      else if (lawId in CONSCRIPTION_LAW_SPECS) laws.push({ slot: 'conscription', lawId });
+      else if (lawId in TRADE_LAW_SPECS) laws.push({ slot: 'trade', lawId });
+    }
+  }
+
+  const research: string[] = [];
+  const rawResearch = sp.get('research');
+  if (rawResearch) {
+    for (const part of rawResearch.split(',')) {
+      const tid = part.trim();
+      if (tid) research.push(tid);
+    }
+  }
+
   return {
     autotest,
     screen,
@@ -151,6 +206,15 @@ export function parseUrlHarness(search: string = window.location.search): UrlHar
     subtab,
     autotrade,
     queue,
+    crisisPermille,
+    ap,
+    mobilizationPermille,
+    atWar: isFlag('atWar'),
+    atWarMajor: isFlag('atWarMajor'),
+    homelandInvaded: isFlag('homelandInvaded'),
+    armyInferior: isFlag('armyInferior'),
+    laws,
+    research,
     mapmode,
     cam,
     selectProv: parseIntOrNull(sp.get('selectProv')),

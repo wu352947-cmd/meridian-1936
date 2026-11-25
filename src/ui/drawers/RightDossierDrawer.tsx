@@ -10,6 +10,7 @@ import {
   simTickSig,
   type AppActions,
 } from '../store/simStore';
+import { GovernanceDrawer } from './GovernanceDrawer';
 import { IndustryDrawer } from './IndustryDrawer';
 
 interface Props {
@@ -67,7 +68,7 @@ const DRAWER_SPEC: Record<
 
 export function RightDossierDrawer({ actions, onClose }: Props) {
   const tab = activeDrawerSig.value;
-  if (!tab) return null;
+  if (!tab || tab === 'tech') return null;
 
   const spec = DRAWER_SPEC[tab];
   const tag = simPlayerTagSig.value;
@@ -90,6 +91,8 @@ export function RightDossierDrawer({ actions, onClose }: Props) {
 
       {tab === 'industry' ? (
         <IndustryDrawer actions={actions} />
+      ) : tab === 'directives' ? (
+        <GovernanceDrawer actions={actions} />
       ) : (
       <div class="drawer-body">
         <div class="drawer-stamp-card">

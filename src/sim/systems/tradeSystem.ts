@@ -17,6 +17,8 @@ export interface TradeNationInput {
   usableCiv: number;
   convoysTotal: number;
   hasCoastal: boolean;
+  /** Max exportable fraction of domestic production in permille (500=50%, 250=25%, 0=0%). Default 1000. */
+  exportSharePermille?: number;
   prod: Record<ResourceType, number>;
   demand: Record<ResourceType, number>;
 }
@@ -122,10 +124,18 @@ export function resolveDailyTrade(
       convoysUsed: 0,
       deals: [],
     });
+    const expShare = inp.exportSharePermille ?? 1000;
+    const capExport = (prodVal: number, demandVal: number): number => {
+      const rawSurplus = Math.max(0, prodVal - demandVal);
+      if (expShare <= 0) return 0;
+      if (expShare >= 1000) return rawSurplus;
+      const lawCap = Math.floor((prodVal * expShare) / 1000);
+      return Math.min(rawSurplus, lawCap);
+    };
     surplus.set(inp.tag, {
-      steel: Math.max(0, inp.prod.steel - inp.demand.steel),
-      oil: Math.max(0, inp.prod.oil - inp.demand.oil),
-      rare: Math.max(0, inp.prod.rare - inp.demand.rare),
+      steel: capExport(inp.prod.steel, inp.demand.steel),
+      oil: capExport(inp.prod.oil, inp.demand.oil),
+      rare: capExport(inp.prod.rare, inp.demand.rare),
     });
   }
 

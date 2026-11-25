@@ -36,6 +36,32 @@ import {
 } from './industryTypes';
 import { resolveDailyTrade, type TradeNationInput } from './tradeSystem';
 
+export interface IndustryLawTechMods {
+  economyLaw: EconomyLaw;
+  exportSharePermille: number;
+  factoryOutputModPermille: number;
+  milOutputModPermille: number;
+  buildSpeedModPermille: number;
+  milBuildSpeedModPermille: number;
+  synthBuildSpeedModPermille: number;
+  masteryCapModPermille: number;
+  regionSlotBonus: number;
+  synthOilPerPlant: number;
+}
+
+const DEFAULT_IND_MODS: IndustryLawTechMods = {
+  economyLaw: 'civilian',
+  exportSharePermille: 500,
+  factoryOutputModPermille: 0,
+  milOutputModPermille: 0,
+  buildSpeedModPermille: 0,
+  milBuildSpeedModPermille: 0,
+  synthBuildSpeedModPermille: 0,
+  masteryCapModPermille: 0,
+  regionSlotBonus: 0,
+  synthOilPerPlant: 0,
+};
+
 interface RegionState {
   id: number;
   owner: string;
@@ -100,10 +126,15 @@ export class IndustrySystem {
   private regions: RegionState[] = [];
   private regionById = new Map<number, RegionState>();
   private nations = new Map<string, NationIndustryState>();
+  private modsByTag = new Map<string, IndustryLawTechMods>();
   private nationOrder: string[] = [];
   private nextProjectId = 1;
 
-  reset(cohesionByTag: ReadonlyMap<string, number>): void {
+  reset(cohesionByTag: ReadonlyMap<string, number>, modsByTag?: ReadonlyMap<string, IndustryLawTechMods>): void {
+    this.modsByTag.clear();
+    if (modsByTag) {
+      for (const [k, v] of modsByTag.entries()) this.modsByTag.set(k, { ...v });
+    }
     this.regions = REGIONS_1936.map((r) => ({
       id: r.id,
       owner: r.owner,
@@ -163,6 +194,23 @@ export class IndustrySystem {
     this.recomputeEconomyPreview(cohesionByTag);
   }
 
+  /** Update nation law & tech modifiers and immediately refresh industrial preview. */
+  setNationModifiers(
+    modsByTag: ReadonlyMap<string, IndustryLawTechMods>,
+    cohesionByTag: ReadonlyMap<string, number>,
+  ): void {
+    for (const [k, v] of modsByTag.entries()) {
+      this.modsByTag.set(k, { ...v });
+      const n = this.nations.get(k);
+      if (n) n.economyLaw = v.economyLaw;
+    }
+    this.recomputeEconomyPreview(cohesionByTag);
+  }
+
+  private getMods(tag: string): IndustryLawTechMods {
+    return this.modsByTag.get(tag) ?? DEFAULT_IND_MODS;
+  }
+
   /** Recompute factories, resources, trade, and construction allocation without advancing time. */
   recomputeEconomyPreview(cohesionByTag: ReadonlyMap<string, number>): void {
     const prodByTag = this.aggregateRegions();
@@ -171,6 +219,8 @@ export class IndustrySystem {
     for (const tag of this.nationOrder) {
       const n = this.nations.get(tag)!;
       const ag = prodByTag.get(tag)!;
+      const m = this.getMods(tag);
+      n.economyLaw = m.economyLaw;
       n.civTotal = ag.civ;
       n.milTotal = ag.mil;
       n.docTotal = ag.doc;
@@ -187,6 +237,7 @@ export class IndustrySystem {
         usableCiv,
         convoysTotal: Math.floor(n.lines.CONVOY.stockpileFixed / FIXED_SCALE),
         hasCoastal: ag.hasCoastal,
+        exportSharePermille: m.exportSharePermille,
         prod: { steel: ag.steel, oil: ag.oil, rare: ag.rare },
         demand,
       });
@@ -197,6 +248,7 @@ export class IndustrySystem {
     for (const inp of tradeInputs) {
       const n = this.nations.get(inp.tag)!;
       const tr = tradeResults.get(inp.tag)!;
+      const m = this.getMods(inp.tag);
       const usableCiv = n.civTotal - n.civConsumer;
       n.civTrade = clampInt(tr.tradeCiv, 0, usableCiv);
       n.convoysUsed = tr.convoysUsed;
@@ -211,13 +263,19 @@ export class IndustrySystem {
       const covO = calcResourceCoveragePermille(inp.prod.oil + tr.imported.oil - tr.exported.oil, inp.demand.oil);
       const covR = calcResourceCoveragePermille(inp.prod.rare + tr.imported.rare - tr.exported.rare, inp.demand.rare);
       const coh = cohesionByTag.get(inp.tag) ?? 500;
+      const masteryCapMicro = clampInt(MASTERY_MAX_INIT_MICRO + m.masteryCapModPermille * 1000, 300_000, 1_000_000);
 
       for (const eq of EQUIPMENT_LIST) {
         const line = n.lines[eq];
         const spec = EQUIPMENT_SPECS[eq];
+        line.masteryMaxMicro = masteryCapMicro;
         const resMult = calcLineResourceMultPermille(spec, covS, covO, covR);
+        const outMult =
+          spec.factoryKind === 'MIL'
+            ? clampInt(FIXED_SCALE + m.factoryOutputModPermille + m.milOutputModPermille, 200, 3000)
+            : clampInt(FIXED_SCALE + m.factoryOutputModPermille, 200, 3000);
         line.lastResourceMultPermille = resMult;
-        line.lastDailyUnitsFixed = calcLineDailyUnitsFixed(spec, line.factories, line.masteryMicro, coh, FIXED_SCALE, resMult);
+        line.lastDailyUnitsFixed = calcLineDailyUnitsFixed(spec, line.factories, line.masteryMicro, coh, outMult, resMult);
       }
 
       let remBuild = usableCiv - n.civTrade;
@@ -226,7 +284,10 @@ export class IndustrySystem {
         const reg = this.regionById.get(proj.regionId);
         const assigned = Math.min(MAX_CIV_PER_PROJECT, remBuild);
         proj.lastAssignedCiv = assigned;
-        proj.lastDailyCpFixed = reg ? calcDailyCpFixed(assigned, reg.infra) : 0;
+        let speedMult = FIXED_SCALE + m.buildSpeedModPermille;
+        if (proj.building === 'MIL') speedMult += m.milBuildSpeedModPermille;
+        else if (proj.building === 'SYNTH') speedMult += m.synthBuildSpeedModPermille;
+        proj.lastDailyCpFixed = reg ? calcDailyCpFixed(assigned, reg.infra, speedMult) : 0;
         remBuild -= assigned;
         usedBuild += assigned;
       }
@@ -282,9 +343,10 @@ export class IndustrySystem {
       const queuedInfra = n.queue.filter((p) => p.regionId === regionId && p.building === 'INFRA').length;
       if (reg.infra + queuedInfra >= 5) return false;
     } else {
+      const m = this.getMods(tag);
       const usedSlots = reg.civ + reg.mil + reg.doc + reg.synth;
       const queuedSlots = n.queue.filter((p) => p.regionId === regionId && BUILDING_SPECS[p.building].usesSlot).length;
-      if (usedSlots + queuedSlots >= reg.slots) return false;
+      if (usedSlots + queuedSlots >= reg.slots + m.regionSlotBonus) return false;
     }
 
     n.queue.push({
@@ -455,6 +517,7 @@ export class IndustrySystem {
 
     const regions: RegionDynamicSnap[] = this.regions.map((r) => {
       const act = r.owner === n.tag ? activeByRegion.get(r.id) : undefined;
+      const ownerMods = this.getMods(r.owner);
       return {
         id: r.id,
         owner: r.owner,
@@ -463,9 +526,9 @@ export class IndustrySystem {
         doc: r.doc,
         synth: r.synth,
         infra: r.infra,
-        slots: r.slots,
+        slots: r.slots + ownerMods.regionSlotBonus,
         steel: r.baseSteel,
-        oil: r.baseOil + r.synth * SYNTH_OIL_BONUS,
+        oil: r.baseOil + r.synth * (SYNTH_OIL_BONUS + ownerMods.synthOilPerPlant),
         rare: r.baseRare,
         activeBuilding: act?.building ?? null,
         activeProgressPermille: act?.progressPermille ?? 0,
@@ -538,11 +601,12 @@ export class IndustrySystem {
     for (const r of this.regions) {
       const acc = out.get(r.owner);
       if (!acc) continue;
+      const ownerMods = this.getMods(r.owner);
       acc.civ += r.civ;
       acc.mil += r.mil;
       acc.doc += r.doc;
       acc.steel += r.baseSteel;
-      acc.oil += r.baseOil + r.synth * SYNTH_OIL_BONUS;
+      acc.oil += r.baseOil + r.synth * (SYNTH_OIL_BONUS + ownerMods.synthOilPerPlant);
       acc.rare += r.baseRare;
       if (r.isCoastal) acc.hasCoastal = true;
     }

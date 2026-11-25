@@ -1,0 +1,311 @@
+/* Meridian 1936 — Batch 04 F4 Prussian Cyanotype Tech Blueprint Modal (Part 2: Ruler, Nodes & Inspector) */
+
+.bp-ruler-row {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  background: rgba(13, 33, 53, 0.76);
+  border-bottom: 1px solid rgba(230, 242, 255, 0.36);
+}
+
+.bp-ruler-head {
+  width: 96px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: rgba(230, 242, 255, 0.72);
+  letter-spacing: 0.08em;
+}
+
+.bp-ruler-track {
+  position: relative;
+  width: 900px;
+  height: 100%;
+  margin-left: 8px;
+}
+
+.bp-ruler-tick {
+  position: absolute;
+  top: 2px;
+  width: 154px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(230, 242, 255, 0.82);
+  letter-spacing: 0.08em;
+}
+
+.bp-ruler-tick.is-now span {
+  background: rgba(230, 242, 255, 0.2);
+  border: 1px solid #E6F2FF;
+  border-radius: 2px;
+  padding: 0 7px;
+  color: #FFFFFF;
+}
+
+.bp-canvas-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 7px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bp-branch-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  border-bottom: 1px dashed rgba(230, 242, 255, 0.22);
+  padding-bottom: 4px;
+}
+
+.bp-branch-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.bp-branch-label {
+  width: 96px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: rgba(13, 33, 54, 0.65);
+  border: 1px solid rgba(230, 242, 255, 0.32);
+  border-radius: 3px;
+  padding: 4px;
+  text-align: center;
+}
+
+.bp-branch-name {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #F0F7FF;
+  letter-spacing: 0.04em;
+}
+
+.bp-branch-count {
+  font-size: 10px;
+  color: rgba(230, 242, 255, 0.66);
+}
+
+.bp-branch-track {
+  position: relative;
+  width: 900px;
+  flex-shrink: 0;
+}
+
+.bp-connector-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bp-node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 7px;
+  border-radius: 3px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: #E6F2FF;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.bp-node.is-available {
+  background: rgba(20, 43, 66, 0.94);
+  border: 1px dashed rgba(230, 242, 255, 0.78);
+}
+
+.bp-node.is-available:hover {
+  background: rgba(31, 66, 102, 0.96);
+  border-style: solid;
+  border-color: #FFFFFF;
+}
+
+.bp-node.is-completed {
+  background: #234B6E;
+  border: 1.5px solid #E6F2FF;
+  color: #FFFFFF;
+  box-shadow: 0 0 8px rgba(230, 242, 255, 0.18);
+}
+
+.bp-node.is-researching {
+  background: #1B3E60;
+  border: 1.5px solid #E8B14C;
+  color: #FFFFFF;
+  box-shadow: 0 0 10px rgba(232, 177, 76, 0.36);
+}
+
+.bp-node.is-locked {
+  background: rgba(15, 34, 54, 0.85);
+  border: 1px dashed rgba(230, 242, 255, 0.3);
+  color: rgba(230, 242, 255, 0.56);
+}
+
+.bp-node.is-excluded {
+  background: rgba(48, 28, 36, 0.65);
+  border: 1px dashed rgba(235, 134, 122, 0.45);
+  color: rgba(242, 196, 190, 0.68);
+}
+
+.bp-node.is-selected {
+  box-shadow: 0 0 0 2px rgba(230, 242, 255, 0.85);
+  z-index: 2;
+}
+
+.bp-node-prog-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(232, 177, 76, 0.24);
+  pointer-events: none;
+}
+
+.bp-node-name {
+  position: relative;
+  z-index: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bp-node-badge {
+  position: relative;
+  z-index: 1;
+  font-size: 9.5px;
+  flex-shrink: 0;
+  color: rgba(230, 242, 255, 0.78);
+}
+
+.bp-eta-tag {
+  font-style: normal;
+  color: #FAD382;
+  font-weight: 600;
+}
+
+.bp-ahead-tag {
+  font-style: normal;
+  color: #F0B66A;
+}
+
+.bp-inspector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: rgba(12, 29, 47, 0.9);
+  border-top: 1px solid rgba(230, 242, 255, 0.48);
+}
+
+.bp-insp-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bp-insp-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.bp-insp-title strong {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: #FFFFFF;
+}
+
+.bp-insp-yr {
+  font-size: 10.5px;
+  padding: 0 5px;
+  border: 1px solid rgba(230, 242, 255, 0.45);
+  border-radius: 2px;
+  color: #D8ECFF;
+}
+
+.bp-insp-days {
+  font-size: 11px;
+  color: #FAD382;
+}
+
+.bp-insp-mods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.bp-mod-chip {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: rgba(35, 75, 110, 0.85);
+  border: 1px solid rgba(230, 242, 255, 0.48);
+  color: #F0F8FF;
+}
+
+.bp-block-chip {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: rgba(164, 54, 46, 0.38);
+  border: 1px solid rgba(240, 140, 128, 0.65);
+  color: #FFD6D0;
+}
+
+.bp-insp-right {
+  flex-shrink: 0;
+}
+
+.bp-status-pill.done {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 3px;
+  background: #234B6E;
+  border: 1px solid #E6F2FF;
+  color: #FFFFFF;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.bp-act-btn {
+  padding: 6px 13px;
+  border-radius: 3px;
+  border: 1px solid #E6F2FF;
+  background: #245078;
+  color: #FFFFFF;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bp-act-btn:hover:not(:disabled) {
+  background: #2F6696;
+}
+
+.bp-act-btn.is-cancel {
+  border-color: #E8B14C;
+  background: rgba(180, 120, 36, 0.34);
+  color: #FDE5AC;
+}
+
+.bp-act-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}

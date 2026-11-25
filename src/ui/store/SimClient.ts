@@ -7,11 +7,19 @@ import type { GameCommand, InitScenarioPayload } from '../../sim/core/GameComman
 import { decodeSnapshot, type WorldSnapshot } from '../../sim/core/SnapshotCodec';
 import type { TickerDispatch } from '../../sim/core/SimEngine';
 import { PLAYABLE_TAG_LIST } from '../../sim/data/nations1936';
+import type { GovernanceLawId, GovernanceSlot, GovernanceSnapshot } from '../../sim/systems/governanceTypes';
 import type { BuildingType, EquipmentType, IndustrySnapshot } from '../../sim/systems/industryTypes';
+import type { TechSnapshot } from '../../sim/systems/techTypes';
 import type { MainToWorkerMessage, WorkerToMainMessage } from '../../sim/workerProtocol';
 
 export interface SimClientHandlers {
-  onSnapshot: (snap: WorldSnapshot, dispatches?: TickerDispatch[], industry?: IndustrySnapshot) => void;
+  onSnapshot: (
+    snap: WorldSnapshot,
+    dispatches?: TickerDispatch[],
+    industry?: IndustrySnapshot,
+    governance?: GovernanceSnapshot,
+    tech?: TechSnapshot,
+  ) => void;
 }
 
 export class SimClient {
@@ -48,7 +56,7 @@ export class SimClient {
         const ret: MainToWorkerMessage = { type: 'RETURN_BUFFER', buffer: msg.buffer };
         this.worker.postMessage(ret, [msg.buffer]);
 
-        handlers.onSnapshot(snap, msg.dispatches, msg.industry);
+        handlers.onSnapshot(snap, msg.dispatches, msg.industry, msg.governance, msg.tech);
 
         if (this.snapshotWaiters.length > 0) {
           const waiters = this.snapshotWaiters.splice(0);
@@ -121,6 +129,18 @@ export class SimClient {
 
   toggleAutoTrade(enabled?: boolean): void {
     this.sendCommand('TOGGLE_AUTO_TRADE', { enabled });
+  }
+
+  setGovernanceLaw(slot: GovernanceSlot, lawId: GovernanceLawId): void {
+    this.sendCommand('SET_GOVERNANCE_LAW', { slot, lawId });
+  }
+
+  startResearch(techId: string, slotIndex?: number): void {
+    this.sendCommand('START_RESEARCH', { techId, slotIndex });
+  }
+
+  cancelResearch(slotIndex: number): void {
+    this.sendCommand('CANCEL_RESEARCH', { slotIndex });
   }
 
   stepOnce(): void {

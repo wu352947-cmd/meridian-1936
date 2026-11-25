@@ -6,7 +6,9 @@ import type { DrawerTab, IndustrySubTab, ScreenMode } from '../../debug/urlHarne
 import type { SimSpeed } from '../../sim/core/ClockCalendar';
 import type { TickerDispatch } from '../../sim/core/SimEngine';
 import type { SimNationSnapshot, WorldSnapshot } from '../../sim/core/SnapshotCodec';
+import type { GovernanceLawId, GovernanceSlot, GovernanceSnapshot } from '../../sim/systems/governanceTypes';
 import type { BuildingType, EquipmentType, IndustrySnapshot } from '../../sim/systems/industryTypes';
+import type { TechSnapshot } from '../../sim/systems/techTypes';
 import type { MapMode } from '../../types/map';
 
 export const screenModeSig = signal<ScreenMode>('country_select');
@@ -27,11 +29,15 @@ export const simPlayerTagSig = signal<string>('GER');
 export const simNationsSig = signal<Record<string, SimNationSnapshot>>({});
 export const simDispatchesSig = signal<TickerDispatch[]>([]);
 export const simIndustrySig = signal<IndustrySnapshot | null>(null);
+export const simGovernanceSig = signal<GovernanceSnapshot | null>(null);
+export const simTechSig = signal<TechSnapshot | null>(null);
 
 export function applyWorldSnapshot(
   snap: WorldSnapshot,
   dispatches?: TickerDispatch[],
   industry?: IndustrySnapshot,
+  governance?: GovernanceSnapshot,
+  tech?: TechSnapshot,
 ): void {
   const byTag: Record<string, SimNationSnapshot> = {};
   for (const n of snap.nations) byTag[n.tag] = n;
@@ -44,6 +50,8 @@ export function applyWorldSnapshot(
     simNationsSig.value = byTag;
     if (dispatches) simDispatchesSig.value = dispatches;
     if (industry) simIndustrySig.value = industry;
+    if (governance) simGovernanceSig.value = governance;
+    if (tech) simTechSig.value = tech;
     simReadySig.value = true;
   });
 }
@@ -68,4 +76,7 @@ export interface AppActions {
   setLineFactories: (eqType: EquipmentType, factories: number) => void;
   switchProductionLine: (fromType: EquipmentType, toType: EquipmentType, count?: number) => void;
   toggleAutoTrade: (enabled?: boolean) => void;
+  setGovernanceLaw: (slot: GovernanceSlot, lawId: GovernanceLawId) => void;
+  startResearch: (techId: string, slotIndex?: number) => void;
+  cancelResearch: (slotIndex: number) => void;
 }

@@ -33,7 +33,7 @@ EXTRA_UI_CHARS = (
     "左键点击选中省份国家滚轮拖拽平移模式快捷键当前层级详查战术战役洲际"
     "甲乙丙丁戊己庚辛壬癸东西南北中上下左右前后内外高低大小"
     "〇一二三四五六七八九十百千万亿年月日起止时分秒"
-    "·—…「」『』【】（）《》，。、：；！？％＋－×÷°′″★☆✦⚡▲▼➔•◈▶❚▴▾"
+    "·—…「」『』【】（）《》，。、：；！？％＋－×÷°′″★☆✦⚡▲▼➔→•◈▶❚▴▾✓✕"
 )
 
 
@@ -44,7 +44,7 @@ def collect_charset() -> str:
         chars.add(chr(cp))
     for cp in range(0xC0, 0x180):
         chars.add(chr(cp))
-    # Pull every character from compiled europe_1936.json and src/
+    # Pull every character from compiled europe_1936.json, tech_tree.json, regions1936.json and src/
     meta_file = ROOT / "public" / "data" / "europe_1936" / "europe_1936.json"
     if meta_file.exists():
         meta = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -55,6 +55,12 @@ def collect_charset() -> str:
         for c in meta.get("labelCurves", []):
             chars.update(c.get("nameZh", ""))
             chars.update(c.get("nameEn", ""))
+    for json_file in [
+        ROOT / "public" / "data" / "europe_1936" / "tech_tree.json",
+        ROOT / "src" / "sim" / "data" / "regions1936.json",
+    ]:
+        if json_file.exists():
+            chars.update(json_file.read_text(encoding="utf-8"))
     for src_file in (ROOT / "src").rglob("*.ts*"):
         chars.update(src_file.read_text(encoding="utf-8"))
     # Remove control chars

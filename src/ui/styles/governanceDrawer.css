@@ -1,0 +1,304 @@
+/* Meridian 1936 — Batch 04 F1 Governance Laws & Manpower Dossier Drawer (<=380px) */
+
+.gov-drawer-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.gov-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(24, 21, 18, 0.96);
+  border-bottom: 1px solid rgba(110, 93, 66, 0.48);
+}
+
+.gov-flag {
+  width: 38px;
+  height: 25px;
+  border-radius: 2px;
+  border: 1px solid rgba(234, 226, 211, 0.42);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+  flex-shrink: 0;
+}
+
+.gov-banner-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gov-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.gov-country-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ui-text-primary);
+}
+
+.gov-ap-pill {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #F4DEAB;
+  background: #2C251C;
+  border: 1px solid rgba(197, 160, 89, 0.62);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.gov-ap-pill em {
+  font-style: normal;
+  color: #82C28B;
+  font-weight: 500;
+}
+
+.gov-banner-sub {
+  font-size: 10px;
+  color: var(--ui-text-muted);
+}
+
+.gov-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 7px 9px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.gov-directive-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  background: rgba(244, 239, 230, 0.07);
+  border: 1px dashed rgba(197, 160, 89, 0.44);
+  border-radius: 3px;
+  font-size: 10px;
+  color: var(--ui-text-secondary);
+}
+
+.gov-note-tag {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(197, 160, 89, 0.22);
+  color: #E8C77F;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.gov-mp-card,
+.gov-slot-card {
+  background: var(--ui-bg-elevated);
+  border: 1px solid rgba(110, 93, 66, 0.48);
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.gov-slot-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  border-bottom: 1px solid rgba(110, 93, 66, 0.32);
+  padding-bottom: 3px;
+}
+
+.gov-slot-head h3 {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  color: #E8C77F;
+  font-weight: 600;
+}
+
+.gov-slot-note {
+  font-size: 10px;
+  color: var(--ui-text-secondary);
+}
+
+.gov-mp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.gov-mp-cell {
+  background: #201D1A;
+  border: 1px solid rgba(110, 93, 66, 0.3);
+  border-radius: 3px;
+  padding: 3px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.gov-mp-cell span {
+  font-size: 9px;
+  color: var(--ui-text-muted);
+}
+
+.gov-mp-cell strong {
+  font-size: 11px;
+  color: var(--ui-text-primary);
+}
+
+.gov-mp-cell .gov-mp-hi {
+  color: #9DD6A5;
+}
+
+.gov-mob-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gov-mob-bar-track {
+  position: relative;
+  height: 14px;
+  background: #1A1714;
+  border: 1px solid rgba(110, 93, 66, 0.45);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.gov-mob-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #42744B, #69A874);
+}
+
+.gov-mob-bar-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  color: #F6F1E6;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+.gov-mp-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 3px 8px;
+  font-size: 9.5px;
+  color: var(--ui-text-muted);
+}
+
+.gov-inflow-tag {
+  color: #E8B85B;
+}
+
+.gov-law-grid {
+  display: grid;
+  gap: 5px;
+}
+
+.gov-law-grid.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.gov-law-grid.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.gov-law-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 5px 6px;
+  border-radius: 3px;
+  background: #211E1A;
+  border: 1px solid rgba(110, 93, 66, 0.38);
+  color: inherit;
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.gov-law-tile.is-ready:hover {
+  background: #332B20;
+  border-color: #E2BE74;
+}
+
+.gov-law-tile.is-active {
+  background: rgba(197, 160, 89, 0.17);
+  border-color: #DFB763;
+  cursor: default;
+}
+
+.gov-law-tile.is-locked {
+  opacity: 0.68;
+  cursor: not-allowed;
+}
+
+.gov-tile-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.gov-law-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ui-text-primary);
+  white-space: nowrap;
+}
+
+.gov-active-pill {
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: #C5A059;
+  color: #1D1915;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.gov-cost-pill {
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: #2B251E;
+  border: 1px solid rgba(110, 93, 66, 0.55);
+  color: var(--ui-text-muted);
+  flex-shrink: 0;
+}
+
+.gov-cost-pill.ready {
+  background: #463824;
+  border-color: #C5A059;
+  color: #FCE9BC;
+}
+
+.gov-law-effect {
+  font-size: 9.5px;
+  color: var(--ui-text-secondary);
+  line-height: 1.3;
+}
+
+.gov-law-block {
+  font-size: 9.5px;
+  color: #E5877B;
+  line-height: 1.25;
+}

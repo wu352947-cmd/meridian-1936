@@ -1,0 +1,213 @@
+/* Meridian 1936 — Batch 04 F4 Prussian Cyanotype Tech Blueprint Modal (Part 1: Shell & Header) */
+
+.bp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 20, 34, 0.56);
+  backdrop-filter: blur(5px);
+}
+
+.bp-sheet {
+  position: relative;
+  width: min(1028px, calc(100vw - 36px));
+  height: min(678px, calc(100vh - 104px));
+  display: flex;
+  flex-direction: column;
+  background-color: #142B42;
+  background-image:
+    linear-gradient(rgba(230, 242, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(230, 242, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(rgba(230, 242, 255, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(230, 242, 255, 0.11) 1px, transparent 1px),
+    radial-gradient(circle at 50% 42%, rgba(44, 96, 146, 0.28), rgba(14, 32, 52, 0.45));
+  background-size: 16px 16px, 16px 16px, 64px 64px, 64px 64px, 100% 100%;
+  border: 1.5px solid rgba(230, 242, 255, 0.72);
+  border-radius: 4px;
+  box-shadow:
+    0 22px 58px rgba(4, 12, 22, 0.72),
+    inset 0 0 0 4px #142B42,
+    inset 0 0 0 5px rgba(230, 242, 255, 0.32);
+  color: #E6F2FF;
+  overflow: hidden;
+}
+
+.bp-corner {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-color: #E6F2FF;
+  border-style: solid;
+  pointer-events: none;
+  z-index: 3;
+}
+.bp-corner.tl { top: 2px; left: 2px; border-width: 2px 0 0 2px; }
+.bp-corner.tr { top: 2px; right: 2px; border-width: 2px 2px 0 0; }
+.bp-corner.bl { bottom: 2px; left: 2px; border-width: 0 0 2px 2px; }
+.bp-corner.br { bottom: 2px; right: 2px; border-width: 0 2px 2px 0; }
+
+.bp-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px 8px;
+  background: rgba(12, 29, 47, 0.78);
+  border-bottom: 1px solid rgba(230, 242, 255, 0.45);
+}
+
+.bp-title-block {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 270px;
+}
+
+.bp-flag {
+  width: 34px;
+  height: 22px;
+  border: 1px solid rgba(230, 242, 255, 0.6);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.bp-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.bp-title-row h2 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: #F2F8FF;
+  letter-spacing: 0.05em;
+}
+
+.bp-sheet-code {
+  font-size: 9.5px;
+  color: rgba(230, 242, 255, 0.68);
+  border: 1px solid rgba(230, 242, 255, 0.34);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+.bp-subtitle {
+  font-size: 10.5px;
+  color: rgba(214, 234, 255, 0.85);
+  margin-top: 2px;
+}
+
+.bp-slots-strip {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 6px;
+}
+
+.bp-slot-card {
+  padding: 4px 7px;
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.bp-slot-card.is-idle {
+  background: rgba(16, 36, 56, 0.65);
+  border: 1px dashed rgba(230, 242, 255, 0.44);
+}
+
+.bp-slot-card.is-busy {
+  background: rgba(29, 68, 105, 0.88);
+  border: 1px solid #E6B152;
+  box-shadow: 0 0 10px rgba(230, 177, 82, 0.24);
+  cursor: pointer;
+}
+
+.bp-slot-idx {
+  font-size: 9.5px;
+  color: rgba(230, 242, 255, 0.68);
+}
+
+.bp-slot-idle-txt {
+  font-size: 10px;
+  color: rgba(230, 242, 255, 0.56);
+}
+
+.bp-slot-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.bp-slot-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bp-slot-cancel {
+  background: none;
+  border: none;
+  color: rgba(230, 242, 255, 0.72);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.bp-slot-cancel:hover {
+  color: #FF9C8E;
+}
+
+.bp-slot-bar {
+  height: 4px;
+  background: rgba(12, 28, 46, 0.85);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bp-slot-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #D99B38, #F4CA74);
+}
+
+.bp-slot-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: rgba(230, 242, 255, 0.86);
+}
+
+.bp-slot-meta strong {
+  color: #FAD382;
+}
+
+.bp-close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  border: 1px solid rgba(230, 242, 255, 0.52);
+  background: rgba(20, 43, 66, 0.8);
+  color: #E6F2FF;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.bp-close-btn:hover {
+  background: rgba(44, 86, 128, 0.9);
+  border-color: #FFFFFF;
+}
