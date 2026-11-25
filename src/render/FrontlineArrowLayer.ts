@@ -50,7 +50,9 @@ export class FrontlineArrowLayer {
 
   private armies: ArmySnap[] = [];
   private brigades: BrigadeSnap[] = [];
+  private playerTag = 'GER';
   private controllerByProv = new Map<number, string>();
+  private pocketProvIds = new Set<number>();
   private selectedArmyId: number | null = null;
   private preview: ArrowPreviewState | null = null;
   private zoom = 1.0;
@@ -85,11 +87,15 @@ export class FrontlineArrowLayer {
     brigades: BrigadeSnap[],
     selectedArmyId: number | null,
     controllerByProv?: ReadonlyMap<number, string>,
+    playerTag = 'GER',
+    pocketProvIds?: ReadonlySet<number>,
   ): void {
     this.armies = armies;
     this.brigades = brigades;
     this.selectedArmyId = selectedArmyId;
+    this.playerTag = playerTag;
     if (controllerByProv) this.controllerByProv = new Map(controllerByProv);
+    this.pocketProvIds = pocketProvIds ? new Set(pocketProvIds) : new Set();
     this.redraw();
   }
 
@@ -141,6 +147,9 @@ export class FrontlineArrowLayer {
     const drawn = new Set<string>();
     for (const b of this.brigades) {
       if (b.movingToProvId === null) continue;
+      // Only show clean manual-override / retreating player movement indicators to keep the map uncluttered
+      if (b.owner !== this.playerTag) continue;
+      if (!b.manualOverride && !b.retreating) continue;
       const key = `${b.provinceId}->${b.movingToProvId}`;
       if (drawn.has(key)) continue;
       drawn.add(key);
@@ -171,13 +180,19 @@ export class FrontlineArrowLayer {
     const toothDepth = 5.8 * s;
 
     for (const army of this.armies) {
-      if (!army.frontline) continue;
+      if (!army.frontline || army.owner !== this.playerTag) continue;
       const color = hexToNum(army.color);
       const hi = army.id === this.selectedArmyId;
       const baseW = (hi ? 4.8 : 3.6) * s;
       const provSet = new Set(army.frontline.friendlyProvIds);
+      const filteredArcs = this.pocketProvIds.size > 0
+        ? this.arcs.filter((a) => {
+            for (const pid of a.provIds) if (this.pocketProvIds.has(pid)) return false;
+            return true;
+          })
+        : this.arcs;
       const chains = stitchFrontlineArcs(
-        this.arcs,
+        filteredArcs,
         army.owner,
         army.frontline.targetTag,
         provSet,
@@ -238,7 +253,7 @@ export class FrontlineArrowLayer {
     const s = 1 / Math.pow(Math.max(0.7, this.zoom), 0.42);
 
     for (const army of this.armies) {
-      if (!army.arrow) continue;
+      if (!army.arrow || army.owner !== this.playerTag) continue;
       const p0Prov = this.provById.get(army.arrow.startProvId);
       const p3Prov = this.provById.get(army.arrow.targetProvId);
       if (!p0Prov || !p3Prov) continue;
@@ -337,13 +352,13 @@ export class FrontlineArrowLayer {
     const offW = 11 / this.zoom;
 
     for (const army of this.armies) {
-      if (!army.frontline) continue;
+      if (!army.frontline || army.owner !== this.playerTag) continue;
       const chains = this.frontChainsByArmy.get(army.id) ?? [];
-      // Pick longest continuous chain for this army's handwritten label
-      const bestChain = [...chains].sort((a, b) => b.length - a.length)[0];
-      if (bestChain) {
-        const text = `${army.nameZh} · ${army.brigadeIds.length}旅`;
-        tryPlaceCurvedStaffLabel(this.labelGroup, bestChain, text, army.color, this.view, placed, offW);
+      // Try chains from longest to shortest so every army gets a clean collision-free WenKai label
+      const sortedChains = [...chains].sort((a, b) => b.length - a.length);
+      const text = `${army.nameZh} · ${army.brigadeIds.length}旅`;
+      for (const ch of sortedChains) {
+        if (tryPlaceCurvedStaffLabel(this.labelGroup, ch, text, army.color, this.view, placed, offW)) break;
       }
       const arrowPts = this.arrowSamplesByArmy.get(army.id);
       if (arrowPts && army.arrow) {

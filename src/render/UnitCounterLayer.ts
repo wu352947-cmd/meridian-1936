@@ -144,6 +144,10 @@ export class UnitCounterLayer {
     return null;
   }
 
+  getPlacedScreenBoxes(): Array<[number, number, number, number]> {
+    return this.hitBoxes.map((b) => [b.sx - b.w * 0.5 - 3, b.sy - b.h * 0.5 - 3, b.sx + b.w * 0.5 + 3, b.sy + b.h * 0.5 + 3]);
+  }
+
   hitTestMarquee(x0: number, y0: number, x1: number, y1: number, ownerTag: string): number[] {
     if (!this.root.visible) return [];
     const minX = Math.min(x0, x1);

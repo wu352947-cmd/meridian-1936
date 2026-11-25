@@ -58,6 +58,10 @@ export class CombatBubbleLayer {
     return null;
   }
 
+  getPlacedScreenBoxes(): Array<[number, number, number, number]> {
+    return this.hitBoxes.map((h) => [h.sx - h.r - 4, h.sy - h.r - 4, h.sx + h.r + 4, h.sy + h.r + 14]);
+  }
+
   private toScreen(wx: number, wy: number): [number, number] {
     const { x, y, zoom, vw, vh } = this.cam;
     return [vw * 0.5 + (wx - x) * zoom, vh * 0.5 + (wy - y) * zoom];

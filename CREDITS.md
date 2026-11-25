@@ -30,5 +30,5 @@
 
 ## 3. 图形、国旗与软件栈（Original Art & Libraries）
 
-- **1936 中性合规几何国旗 SVG 与首都版画剪影**（[src/assets/flags/neutralFlags.ts](src/assets/flags/neutralFlags.ts)、[src/assets/landmarks/capitalLandmarks.ts](src/assets/landmarks/capitalLandmarks.ts)）：本项目 100% 原创纯几何 SVG 绘制（MIT / CC0）。德意志采用黑白红横三色配中心直臂铁十字（Balkenkreuz），意大利采用三色配萨伏依蓝盾（无束棒），苏联采用简化金星红旗，日本采用日之丸；零领袖肖像，全仓库严禁任何纳粹卐字、SS 符文、束棒或旭日战旗。
+- **1936 中性合规几何国旗 SVG、首都版画剪影与陆战印章图标**（[src/assets/flags/neutralFlags.ts](src/assets/flags/neutralFlags.ts)、[src/assets/landmarks/capitalLandmarks.ts](src/assets/landmarks/capitalLandmarks.ts)、[src/assets/icons/combatIcons.ts](src/assets/icons/combatIcons.ts)）：本项目 100% 原创纯几何 SVG 绘制（MIT / CC0）。德意志采用黑白红横三色配中心直臂铁十字（Balkenkreuz），意大利采用三色配萨伏依蓝盾（无束棒），苏联采用简化金星红旗，日本采用日之丸；零领袖肖像，全仓库严禁任何纳粹卐字、SS 符文、束棒或旭日战旗。
 - **核心开源引擎与工具**：PixiJS v8 (MIT)、Preact & `@preact/signals` (MIT)、Vite (MIT)、Vitest (MIT)、TopoJSON Client (ISC)、Mapshaper (MPL-2.0，仅构建期离线编译使用)、Shapely / PyProj / Pillow / NumPy / SciPy / fontTools（仅离线地图与字体编译期使用）。

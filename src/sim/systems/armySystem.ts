@@ -298,16 +298,60 @@ export class ArmySystem {
     return true;
   }
 
-  /** Refresh an army's frontline after province control shifts. */
+  /** Refresh frontlines after province control shifts, cleanly partitioning shared targets across armies. */
   refreshFrontlines(getController: ControllerResolver): void {
+    const groups = new Map<string, ArmyState[]>();
     for (const army of this.armies) {
       if (!army.frontline) continue;
-      const updated = buildFrontlineOrder(army.owner, army.frontline.targetTag, getController);
-      if (updated) {
-        army.frontline = updated;
-      }
       if (army.arrow && getController(army.arrow.targetProvId) === army.owner) {
         army.arrow.active = false;
+      }
+      const key = `${army.owner}->${army.frontline.targetTag}`;
+      const list = groups.get(key) ?? [];
+      list.push(army);
+      groups.set(key, list);
+    }
+
+    for (const [, armyList] of groups.entries()) {
+      const sample = armyList[0]!;
+      const full = buildFrontlineOrder(sample.owner, sample.frontline!.targetTag, getController);
+      if (!full) continue;
+      if (armyList.length === 1) {
+        sample.frontline = full;
+        continue;
+      }
+      // Partition border provinces cleanly by nearest army brigade centroid (no duplicate stacked lines)
+      const centroids = armyList.map((a) => {
+        let sx = 0, sy = 0, n = 0;
+        for (const bid of a.brigadeIds) {
+          const b = this.brigadeById.get(bid);
+          const p = b ? getSimProvince(b.provinceId) : null;
+          if (p) { sx += p.cx; sy += p.cy; n++; }
+        }
+        return n > 0 ? [sx / n, sy / n] as [number, number] : [0, 0] as [number, number];
+      });
+      const assignedByArmy = armyList.map(() => new Set<number>());
+      for (const pid of full.friendlyProvIds) {
+        const p = getSimProvince(pid)!;
+        let bestIdx = 0;
+        let bestD = Infinity;
+        for (let i = 0; i < armyList.length; i++) {
+          const [cx, cy] = centroids[i]!;
+          const d = Math.hypot(p.cx - cx, p.cy - cy);
+          if (d < bestD) { bestD = d; bestIdx = i; }
+        }
+        assignedByArmy[bestIdx]!.add(pid);
+      }
+      for (let i = 0; i < armyList.length; i++) {
+        const set = assignedByArmy[i]!;
+        const fIds = full.friendlyProvIds.filter((id) => set.has(id));
+        if (fIds.length > 0) {
+          armyList[i]!.frontline = {
+            targetTag: full.targetTag,
+            friendlyProvIds: fIds,
+            borderPairs: full.borderPairs.filter((bp) => set.has(bp.friendlyProvId)),
+          };
+        }
       }
     }
   }

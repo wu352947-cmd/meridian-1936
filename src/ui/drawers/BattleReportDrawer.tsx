@@ -77,9 +77,9 @@ function SlotGrid({
             </button>
           );
         })}
-        {Array.from({ length: Math.min(empties, 4) }).map((_, i) => (
-          <div key={`e-${i}`} class="br-unit-chip is-empty">空槽</div>
-        ))}
+        {empties > 0 && (
+          <div class="br-unit-chip is-empty">空余 {empties} 槽</div>
+        )}
       </div>
     </div>
   );
@@ -112,6 +112,7 @@ export function BattleReportDrawer({ actions }: Props) {
   ];
   const inspected =
     allUnits.find((u) => u.brigadeId === pickedUnitId) ??
+    battle.attackerFront.find((u) => u.breakdown.armorAdvantage) ??
     battle.attackerFront[0] ??
     battle.defenderFront[0] ??
     allUnits[0] ??

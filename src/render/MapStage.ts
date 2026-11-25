@@ -273,15 +273,19 @@ export class MapStage {
       vh,
     };
     this.labels.updateLod(this.zoom, view);
-    this.frontlines.updateLod(
-      this.zoom,
-      { zoom: this.zoom, minX: view.minX, minY: view.minY, vw, vh },
-      this.labels.getPlacedScreenBoxes(),
-    );
     this.pockets.updateLod(this.zoom);
     this.industryOverlay.updateLod(this.zoom, view);
     this.counters.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
     this.combatBubbles.updateCamera(this.camX, this.camY, this.zoom, vw, vh);
+    this.frontlines.updateLod(
+      this.zoom,
+      { zoom: this.zoom, minX: view.minX, minY: view.minY, vw, vh },
+      [
+        ...this.labels.getPlacedScreenBoxes(),
+        ...this.counters.getPlacedScreenBoxes(),
+        ...this.combatBubbles.getPlacedScreenBoxes(),
+      ],
+    );
     this.cbs.onCameraChange({ x: this.camX, y: this.camY, zoom: this.zoom });
   }
 
@@ -341,8 +345,10 @@ export class MapStage {
     combat?: CombatSystemSnapshot | null,
     selectedBattleProvId: number | null = null,
   ): void {
+    const pocketProvs = new Set<number>();
     if (combat) {
       this.controllerByProv = new Map(combat.occupiedProvinces.map((o) => [o.provId, o.controller]));
+      for (const pk of combat.pockets) for (const pid of pk.provinceIds) pocketProvs.add(pid);
       this.refreshLuts();
       this.counters.setDiplomacyContext(this.playerTag, combat.wars);
       this.pockets.setData(combat.pockets);
@@ -350,8 +356,21 @@ export class MapStage {
     } else {
       this.counters.setDiplomacyContext(this.playerTag, []);
     }
-    this.frontlines.setData(armies, brigades, selectedArmyId, this.controllerByProv);
     this.counters.setData(armies, brigades, selectedBrigadeIds, selectedArmyId);
+    this.frontlines.setData(armies, brigades, selectedArmyId, this.controllerByProv, this.playerTag, pocketProvs);
+    const vw = this.app.screen.width || 1440;
+    const vh = this.app.screen.height || 900;
+    const halfW = (vw * 0.5) / this.zoom;
+    const halfH = (vh * 0.5) / this.zoom;
+    this.frontlines.updateLod(
+      this.zoom,
+      { zoom: this.zoom, minX: this.camX - halfW, minY: this.camY - halfH, vw, vh },
+      [
+        ...this.labels.getPlacedScreenBoxes(),
+        ...this.counters.getPlacedScreenBoxes(),
+        ...this.combatBubbles.getPlacedScreenBoxes(),
+      ],
+    );
   }
 
   selectProvince(provId: number | null): void {

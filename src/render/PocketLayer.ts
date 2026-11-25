@@ -97,21 +97,31 @@ export class PocketLayer {
         this.ringG.stroke({ width: 0.9 * s, color: 0xf7dfc4, alpha: 0.55, cap: 'round' });
       }
 
-      // Single crisp 「被围」 paper seal badge centered on pocket
+      // Single crisp 「被围」 paper seal badge placed cleanly along the north rim (zero counter overlap)
+      let topY = pocket.cy;
+      let topX = pocket.cx;
+      for (const pts of rings) {
+        for (const [rx, ry] of pts) {
+          if (ry < topY) {
+            topY = ry;
+            topX = rx;
+          }
+        }
+      }
       const badge = new Container();
       const bg = new Graphics();
       const labelStr = `被围 · ${pocket.brigadeIds.length}旅`;
-      const bw = 66;
-      const bh = 21;
-      bg.roundRect(-bw * 0.5 + 1, -bh * 0.5 + 1.5, bw, bh, 4).fill({ color: 0x120c09, alpha: 0.48 });
-      bg.roundRect(-bw * 0.5, -bh * 0.5, bw, bh, 4).fill({ color: 0x8e281f, alpha: 0.94 });
-      bg.roundRect(-bw * 0.5, -bh * 0.5, bw, bh, 4).stroke({ width: 1.25, color: 0xe6c173 });
+      const bw = 68;
+      const bh = 22;
+      bg.roundRect(-bw * 0.5 + 1, -bh * 0.5 + 1.5, bw, bh, 4).fill({ color: 0x120c09, alpha: 0.52 });
+      bg.roundRect(-bw * 0.5, -bh * 0.5, bw, bh, 4).fill({ color: 0x94291f, alpha: 0.96 });
+      bg.roundRect(-bw * 0.5, -bh * 0.5, bw, bh, 4).stroke({ width: 1.35, color: 0xeac576 });
 
       const txt = new Text({ text: labelStr, style: POCKET_LABEL_STYLE });
       txt.resolution = 2;
       txt.anchor.set(0.5, 0.5);
       badge.addChild(bg, txt);
-      badge.position.set(pocket.cx, pocket.cy + 14 * inv);
+      badge.position.set((topX + pocket.cx) * 0.5, topY - 12 * inv);
       badge.scale.set(inv);
       this.badgeGroup.addChild(badge);
     }
