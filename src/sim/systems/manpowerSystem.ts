@@ -23,6 +23,7 @@ interface NationManpowerState {
   maxManpower: number;
   mobilizedPool: number;
   deployed: number;
+  inTraining: number;
   casualties: number;
 }
 
@@ -79,9 +80,18 @@ export class ManpowerSystem {
         maxManpower,
         mobilizedPool: maxManpower,
         deployed: p.brigades * BRIGADE_MANPOWER_PLACEHOLDER,
+        inTraining: 0,
         casualties: 0,
       });
     }
+  }
+
+  /** Replace placeholder deployed manpower with real brigade sum + reserved training manpower. */
+  setDeployedAndTraining(tag: string, deployed: number, inTraining: number): void {
+    const n = this.nations.get(tag);
+    if (!n) return;
+    n.deployed = Math.max(0, Math.trunc(deployed));
+    n.inTraining = Math.max(0, Math.trunc(inTraining));
   }
 
   /** Recalculate max cap immediately when laws/modifiers change; upward gap fills smoothly over time. */
@@ -117,7 +127,7 @@ export class ManpowerSystem {
   getAvailableManpower(tag: string): number {
     const n = this.nations.get(tag);
     if (!n) return 0;
-    return Math.max(0, n.mobilizedPool - n.deployed - n.casualties);
+    return Math.max(0, n.mobilizedPool - n.deployed - n.inTraining - n.casualties);
   }
 
   getAvailableManpowerK(tag: string): number {
@@ -127,7 +137,7 @@ export class ManpowerSystem {
   getSnapshotFor(tag: string): ManpowerSnapshot {
     const n = this.nations.get(tag) ?? this.nations.get('GER')!;
     const effRate = Math.max(0, (n.baseRatePermille + n.rateModifierPermille) | 0);
-    const available = Math.max(0, n.mobilizedPool - n.deployed - n.casualties);
+    const available = Math.max(0, n.mobilizedPool - n.deployed - n.inTraining - n.casualties);
     const isMobilizing = n.mobilizedPool < n.maxManpower;
     const dailyInflow = isMobilizing ? Math.min(calcDailyInflow(n.effectivePop), n.maxManpower - n.mobilizedPool) : 0;
     const monthlyInflow = isMobilizing ? calcMonthlyInflow(n.effectivePop) : 0;
@@ -154,7 +164,7 @@ export class ManpowerSystem {
       const n = this.nations.get(tag)!;
       mix(n.maxManpower | 0);
       mix(n.mobilizedPool | 0);
-      mix((n.deployed ^ (n.casualties << 1)) | 0);
+      mix((n.deployed ^ (n.inTraining << 2) ^ (n.casualties << 1)) | 0);
     }
   }
 }

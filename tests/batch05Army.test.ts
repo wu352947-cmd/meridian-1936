@@ -8,12 +8,21 @@ import {
   TERRAIN_MARCH_MULT_PERMILLE,
 } from '../src/sim/data/brigadeTemplates';
 import { ALL_PLAYABLE_NATIONS_1936 } from '../src/sim/data/nations1936';
+import { buildOpeningBrigadesForNation } from '../src/sim/data/openingArmies1936';
 import {
   getCapitalProvince,
   getOwnerProvinces,
   getSimProvince,
   SIM_PROVINCES,
 } from '../src/sim/data/provinces1936';
+import { IndustrySystem } from '../src/sim/systems/industrySystem';
+import {
+  advanceTrainingOrdersDaily,
+  calcTargetTrainDaysFixed,
+  createTrainingOrder,
+  MIN_DEPLOY_STRENGTH_PERMILLE,
+  refundTrainingOrder,
+} from '../src/sim/systems/trainingSystem';
 
 describe('Batch 05 Land Brigades, Training, A* Marching, Frontlines & Orders', () => {
   it('1. validates 6 fixed brigade templates schema/stats and combat slot constants (4+2, 3+1, 5+2, flanking +2/+1)', () => {
@@ -97,5 +106,73 @@ describe('Batch 05 Land Brigades, Training, A* Marching, Frontlines & Orders', (
     const berlin = getCapitalProvince('GER')!;
     expect(berlin.nameZh).toBe('柏林');
     expect(getSimProvince(berlin.id)?.neighbors.length).toBeGreaterThan(0);
+  });
+
+  it('2. validates opening brigade spread and training queue deductions, equipment shortage ratio, and +10% extensive conscription duration', () => {
+    // Opening brigades match profile.brigades and spread across multiple provinces (not all stacked in capital)
+    for (const p of ALL_PLAYABLE_NATIONS_1936) {
+      const plan = buildOpeningBrigadesForNation(p);
+      expect(plan.length, `Opening count mismatch for ${p.tag}`).toBe(p.brigades);
+      const uniqueProvs = new Set(plan.map((b) => b.provinceId));
+      if (getOwnerProvinces(p.tag).length >= 6 && p.brigades >= 8) {
+        expect(uniqueProvs.size, `${p.tag} brigades piled in too few provinces`).toBeGreaterThanOrEqual(4);
+      }
+    }
+
+    // Verify training days: INF 35, ARM 60, +10% (extensive conscription) -> INF 38.5 (39d), ARM 66d
+    expect(calcTargetTrainDaysFixed('INF', 0)).toBe(35_000);
+    expect(calcTargetTrainDaysFixed('GAR', 0)).toBe(35_000);
+    expect(calcTargetTrainDaysFixed('ARM', 0)).toBe(60_000);
+    expect(calcTargetTrainDaysFixed('INF', 100)).toBe(38_500);
+    expect(calcTargetTrainDaysFixed('ARM', 100)).toBe(66_000);
+
+    const ind = new IndustrySystem();
+    const coh = new Map(ALL_PLAYABLE_NATIONS_1936.map((n) => [n.tag, n.cohesion]));
+    ind.reset(coh);
+
+    let availMp = 500_000;
+    const adapter = {
+      getAvailableManpower: () => availMp,
+      consumeEquipment: (tag: string, eq: 'INF_EQ' | 'ART_EQ' | 'MOT_EQ' | 'ARM_EQ' | 'AIR_TAC' | 'AIR_STR' | 'CONVOY', u: number) =>
+        ind.consumeEquipment(tag, eq, u),
+      refundEquipment: (tag: string, eq: 'INF_EQ' | 'ART_EQ' | 'MOT_EQ' | 'ARM_EQ' | 'AIR_TAC' | 'AIR_STR' | 'CONVOY', u: number) =>
+        ind.refundEquipment(tag, eq, u),
+    };
+
+    const infBefore = ind.getStockpileUnits('GER', 'INF_EQ');
+    const artBefore = ind.getStockpileUnits('GER', 'ART_EQ');
+    const ordInf = createTrainingOrder(1, 'GER', 'INF', null, null, 0, adapter)!;
+    expect(ordInf).not.toBeNull();
+    availMp -= ordInf.manpowerAllocated;
+    expect(ordInf.manpowerAllocated).toBe(10_000);
+    expect(ind.getStockpileUnits('GER', 'INF_EQ')).toBe(infBefore - 100);
+    expect(ind.getStockpileUnits('GER', 'ART_EQ')).toBe(artBefore - 10);
+    expect(ordInf.equipmentRatioPermille).toBe(1000);
+
+    // Drain ARM_EQ down to 25 (50% of ARM requirement of 50) -> training still allowed with 50% fill ratio
+    const armStock = ind.getStockpileUnits('GER', 'ARM_EQ');
+    if (armStock > 25) ind.consumeEquipment('GER', 'ARM_EQ', armStock - 25);
+    const ordArm = createTrainingOrder(2, 'GER', 'ARM', null, null, 100, adapter)!;
+    expect(ordArm).not.toBeNull();
+    expect(ordArm.equipmentRatioPermille).toBe(500);
+    expect(ordArm.shortageType).toBe('ARM_EQ');
+    expect(Math.max(MIN_DEPLOY_STRENGTH_PERMILLE, ordArm.equipmentRatioPermille)).toBe(500);
+
+    // Refund restores exact equipment taken
+    const armAfterTake = ind.getStockpileUnits('GER', 'ARM_EQ');
+    expect(armAfterTake).toBe(0);
+    refundTrainingOrder(ordArm, adapter);
+    expect(ind.getStockpileUnits('GER', 'ARM_EQ')).toBe(25);
+
+    // Step 34 days: INF not done yet; day 35 completes INF
+    let queue = [ordInf];
+    for (let d = 0; d < 34; d++) {
+      const res = advanceTrainingOrdersDaily(queue, () => 0);
+      expect(res.completed.length).toBe(0);
+      queue = res.remaining;
+    }
+    const day35 = advanceTrainingOrdersDaily(queue, () => 0);
+    expect(day35.completed.length).toBe(1);
+    expect(day35.completed[0]!.id).toBe(ordInf.id);
   });
 });

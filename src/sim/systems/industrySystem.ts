@@ -450,6 +450,31 @@ export class IndustrySystem {
     this.recomputeEconomyPreview(cohesionByTag);
   }
 
+  getStockpileUnits(tag: string, eqType: EquipmentType): number {
+    const line = this.nations.get(tag)?.lines[eqType];
+    return line ? Math.floor(line.stockpileFixed / FIXED_SCALE) : 0;
+  }
+
+  /** Consume up to `units` whole pieces of equipment from stockpile; returns actual units taken. */
+  consumeEquipment(tag: string, eqType: EquipmentType, units: number): number {
+    const line = this.nations.get(tag)?.lines[eqType];
+    const req = Math.max(0, Math.trunc(units));
+    if (!line || req <= 0) return 0;
+    const avail = Math.floor(line.stockpileFixed / FIXED_SCALE);
+    const taken = Math.min(avail, req);
+    if (taken > 0) {
+      line.stockpileFixed = Math.max(0, line.stockpileFixed - taken * FIXED_SCALE);
+    }
+    return taken;
+  }
+
+  refundEquipment(tag: string, eqType: EquipmentType, units: number): void {
+    const line = this.nations.get(tag)?.lines[eqType];
+    const add = Math.max(0, Math.trunc(units));
+    if (!line || add <= 0) return;
+    line.stockpileFixed += add * FIXED_SCALE;
+  }
+
   getNationSummary(tag: string): { civ: number; mil: number; doc: number; steelNet: number; oilNet: number; rareNet: number } | null {
     const n = this.nations.get(tag);
     if (!n) return null;
