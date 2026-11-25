@@ -319,16 +319,27 @@ export class ArmySystem {
     if (!army1) return;
     const fl = buildFrontlineOrder('GER', 'POL');
     if (!fl) return;
-    army1.frontline = fl;
 
-    // Place Army 1's brigades evenly across ALL GER-POL border provinces (zero gaps, including East Prussia)
+    const southSet = new Set([245, 235, 247]);
+    const southProvs = fl.friendlyProvIds.filter((id) => southSet.has(id));
+    const northProvs = fl.friendlyProvIds.filter((id) => !southSet.has(id));
+    const useSplit = gerArmies.length >= 2 && gerArmies[1]!.brigadeIds.length > 8 && southProvs.length > 0 && northProvs.length > 0;
+
+    army1.frontline = useSplit
+      ? {
+          targetTag: 'POL',
+          friendlyProvIds: northProvs,
+          borderPairs: fl.borderPairs.filter((p) => !southSet.has(p.friendlyProvId)),
+        }
+      : fl;
+
     const brigs1 = army1.brigadeIds
       .map((id) => this.brigadeById.get(id))
       .filter((b): b is BrigadeState => b !== undefined);
-    const frontProvs = fl.friendlyProvIds;
+    const front1 = army1.frontline.friendlyProvIds;
     for (let i = 0; i < brigs1.length; i++) {
       const b = brigs1[i]!;
-      b.provinceId = frontProvs[i % frontProvs.length]!;
+      b.provinceId = front1[i % front1.length]!;
       b.path = [];
       b.moveProgressFixed = 0;
       b.moveEdgeCostFixed = 0;
@@ -336,31 +347,29 @@ export class ArmySystem {
       b.manualOverride = false;
     }
 
-    // Sweeping offensive arrow from East Prussia (Allenstein 250) converging onto Warsaw (384)
     const warsaw = getCapitalProvince('POL');
     if (warsaw) {
-      const startEastPrussia = frontProvs.includes(250) ? 250 : frontProvs[0]!;
-      army1.arrow = buildOffensiveArrowOrder(this.nextArrowId++, army1, startEastPrussia, warsaw.id, 38, -6);
+      const startEastPrussia = front1.includes(250) ? 250 : front1[0]!;
+      army1.arrow = buildOffensiveArrowOrder(this.nextArrowId++, army1, startEastPrussia, warsaw.id, 34, -4);
 
-      // Optional southern pincer from Silesia (Breslau 235) using a compact 4-brigade Panzer vanguard split from Army 2
-      const army2 = gerArmies[1];
-      if (army2 && army2.brigadeIds.length > 8 && frontProvs.includes(235)) {
+      if (useSplit) {
+        const army2 = gerArmies[1]!;
         const vanguard = this.spawnArmyInternal('GER', '西里西亚装甲先锋', '#2F6690');
         vanguard.frontline = {
           targetTag: 'POL',
-          friendlyProvIds: [245, 235, 247].filter((id) => frontProvs.includes(id)),
-          borderPairs: fl.borderPairs.filter((p) => p.friendlyProvId === 245 || p.friendlyProvId === 235 || p.friendlyProvId === 247),
+          friendlyProvIds: southProvs,
+          borderPairs: fl.borderPairs.filter((p) => southSet.has(p.friendlyProvId)),
         };
-        const movedIds = army2.brigadeIds.slice(0, 4);
-        const sProvs = vanguard.frontline.friendlyProvIds;
+        const movedIds = army2.brigadeIds.slice(0, 5);
         movedIds.forEach((bid, idx) => {
           const b = this.brigadeById.get(bid);
-          if (b && sProvs.length > 0) {
+          if (b) {
             this.attachToArmy(b, vanguard.id);
-            b.provinceId = sProvs[idx % sProvs.length]!;
+            b.provinceId = southProvs[idx % southProvs.length]!;
           }
         });
-        vanguard.arrow = buildOffensiveArrowOrder(this.nextArrowId++, vanguard, 235, warsaw.id, -18, 22);
+        const startSouth = southProvs.includes(235) ? 235 : southProvs[0]!;
+        vanguard.arrow = buildOffensiveArrowOrder(this.nextArrowId++, vanguard, startSouth, warsaw.id, -18, 22);
       }
     }
   }

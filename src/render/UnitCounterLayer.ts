@@ -202,25 +202,39 @@ export class UnitCounterLayer {
     }
     const boxes: LayoutBox[] = [];
     for (const [key, list] of groups.entries()) {
-      let sxSum = 0, sySum = 0, cnt = 0, orgSum = 0, strSum = 0;
+      let wxSum = 0, wySum = 0, cnt = 0, orgSum = 0, strSum = 0;
+      const provs: ProvinceRecord[] = [];
       for (const b of list) {
         const p = this.provById.get(b.provinceId);
         if (!p) continue;
-        sxSum += p.cx;
-        sySum += p.cy;
+        wxSum += p.cx;
+        wySum += p.cy;
         cnt += 1;
         orgSum += b.orgPermille;
         strSum += b.strengthPermille;
+        provs.push(p);
       }
       if (cnt === 0) continue;
-      const [sx, sy] = this.toScreen(sxSum / cnt, sySum / cnt);
+      // Snap LOD 0 badge to medoid occupied province so badges NEVER float inside another country or sea
+      const mx = wxSum / cnt;
+      const my = wySum / cnt;
+      let medoid = provs[0]!;
+      let bestD = Infinity;
+      for (const p of provs) {
+        const d = Math.hypot(p.cx - mx, p.cy - my);
+        if (d < bestD || (d === bestD && p.id < medoid.id)) {
+          bestD = d;
+          medoid = p;
+        }
+      }
+      const [sx, sy] = this.toScreen(medoid.cx, medoid.cy);
       if (sx < -60 || sx > vw + 60 || sy < -40 || sy > vh + 40) continue;
       const first = list[0]!;
       const armyId = first.armyId;
       const ids = list.map((b) => b.id);
       boxes.push({
         key, ax: sx, ay: sy, x: sx, y: sy, w: ARMY_BADGE_W, h: ARMY_BADGE_H,
-        item: { owner: first.owner, armyId, provinceId: first.provinceId, brigadeIds: ids, sx, sy, w: ARMY_BADGE_W, h: ARMY_BADGE_H },
+        item: { owner: first.owner, armyId, provinceId: medoid.id, brigadeIds: ids, sx, sy, w: ARMY_BADGE_W, h: ARMY_BADGE_H },
         leadType: first.template,
         orgRatio: orgSum / (cnt * 1000),
         strRatio: strSum / (cnt * 1000),
@@ -246,7 +260,9 @@ export class UnitCounterLayer {
       const first = list[0]!;
       const p = this.provById.get(first.provinceId);
       if (!p) continue;
-      const [sx, sy] = this.toScreen(p.cx, p.cy);
+      const [sx, rawSy] = this.toScreen(p.cx, p.cy);
+      // Lift counter slightly above city dot/label so city names stay crisp and unobstructed
+      const sy = rawSy - 10;
       if (sx < -60 || sx > vw + 60 || sy < -40 || sy > vh + 40) continue;
 
       let lead = first.template;

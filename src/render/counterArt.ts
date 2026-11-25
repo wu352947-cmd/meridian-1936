@@ -50,7 +50,20 @@ export function drawMiniFlag(g: Graphics, tag: string, x: number, y: number, w: 
     g.rect(x + w * 0.5 - 0.9, y + h * 0.5 - 0.35, 1.8, 0.7).fill(0xf3efe6);
   } else if (t === 'SOV') {
     g.rect(x, y, w, h).fill(0x9e2421);
-    g.circle(x + w * 0.3, y + h * 0.36, 1.3).fill(0xe0b445);
+    const sx = x + w * 0.28;
+    const sy = y + h * 0.38;
+    g.poly([
+      sx, sy - 2.0,
+      sx + 0.6, sy - 0.5,
+      sx + 2.0, sy - 0.5,
+      sx + 0.9, sy + 0.4,
+      sx + 1.3, sy + 1.9,
+      sx, sy + 1.0,
+      sx - 1.3, sy + 1.9,
+      sx - 0.9, sy + 0.4,
+      sx - 2.0, sy - 0.5,
+      sx - 0.6, sy - 0.5,
+    ]).fill(0xe5ba4a);
   } else if (t === 'GBR') {
     g.rect(x, y, w, h).fill(0x1b3668);
     g.rect(x + w * 0.4, y, w * 0.2, h).fill(0xf3efe6);
@@ -61,6 +74,64 @@ export function drawMiniFlag(g: Graphics, tag: string, x: number, y: number, w: 
     g.rect(x, y, w, h * 0.5).fill(0xf3efe6);
     g.rect(x, y + h * 0.5, w, h * 0.5).fill(0xc42b3b);
     g.poly([x, y, x + w * 0.46, y + h * 0.5, x, y + h]).fill(0x204a87);
+  } else if (t === 'HOL') {
+    const sh = h / 3;
+    g.rect(x, y, w, sh).fill(0xae2e32);
+    g.rect(x, y + sh, w, sh).fill(0xf3efe6);
+    g.rect(x, y + sh * 2, w, h - sh * 2).fill(0x21468b);
+  } else if (t === 'BEL') {
+    const sw = w / 3;
+    g.rect(x, y, sw, h).fill(0x1e1c1a);
+    g.rect(x + sw, y, sw, h).fill(0xe4b83a);
+    g.rect(x + sw * 2, y, w - sw * 2, h).fill(0xb8292f);
+  } else if (t === 'SWI') {
+    g.rect(x, y, w, h).fill(0xc42b3b);
+    g.rect(x + w * 0.41, y + h * 0.18, w * 0.18, h * 0.64).fill(0xf3efe6);
+    g.rect(x + w * 0.28, y + h * 0.38, w * 0.44, h * 0.24).fill(0xf3efe6);
+  } else if (t === 'AUS') {
+    const sh = h / 3;
+    g.rect(x, y, w, sh).fill(0xc42b3b);
+    g.rect(x, y + sh, w, sh).fill(0xf3efe6);
+    g.rect(x, y + sh * 2, w, h - sh * 2).fill(0xc42b3b);
+  } else if (t === 'HUN') {
+    const sh = h / 3;
+    g.rect(x, y, w, sh).fill(0xb83430);
+    g.rect(x, y + sh, w, sh).fill(0xf3efe6);
+    g.rect(x, y + sh * 2, w, h - sh * 2).fill(0x3d7a4f);
+  } else if (t === 'ROM') {
+    const sw = w / 3;
+    g.rect(x, y, sw, h).fill(0x1f3f7a);
+    g.rect(x + sw, y, sw, h).fill(0xe2b83b);
+    g.rect(x + sw * 2, y, w - sw * 2, h).fill(0xb8292f);
+  } else if (t === 'DEN' || t === 'SWE' || t === 'NOR' || t === 'FIN') {
+    const bg = t === 'DEN' || t === 'NOR' ? 0xb8292f : t === 'SWE' ? 0x235b96 : 0xf3efe6;
+    const cr = t === 'SWE' ? 0xe5bc3a : t === 'DEN' ? 0xf3efe6 : 0x1e4a84;
+    g.rect(x, y, w, h).fill(bg);
+    g.rect(x + w * 0.3, y, w * 0.14, h).fill(cr);
+    g.rect(x, y + h * 0.4, w, h * 0.2).fill(cr);
+  } else if (t === 'LIT') {
+    const sh = h / 3;
+    g.rect(x, y, w, sh).fill(0xe2b53b);
+    g.rect(x, y + sh, w, sh).fill(0x2c6e49);
+    g.rect(x, y + sh * 2, w, h - sh * 2).fill(0xb8292f);
+  } else if (t === 'LAT') {
+    g.rect(x, y, w, h).fill(0x8c2b32);
+    g.rect(x, y + h * 0.38, w, h * 0.24).fill(0xf3efe6);
+  } else if (t === 'EST') {
+    const sh = h / 3;
+    g.rect(x, y, w, sh).fill(0x2d6ca2);
+    g.rect(x, y + sh, w, sh).fill(0x1c1c1c);
+    g.rect(x, y + sh * 2, w, h - sh * 2).fill(0xf3efe6);
+  } else if (t === 'DNZ') {
+    g.rect(x, y, w, h).fill(0xb8292f);
+    g.rect(x + w * 0.24, y + h * 0.25, w * 0.1, h * 0.55).fill(0xf3efe6);
+    g.rect(x + w * 0.14, y + h * 0.36, w * 0.3, h * 0.12).fill(0xf3efe6);
+    g.rect(x + w * 0.14, y + h * 0.58, w * 0.3, h * 0.12).fill(0xf3efe6);
+  } else if (t === 'LUX') {
+    const sh = h / 3;
+    g.rect(x, y, w, sh).fill(0xc42b3b);
+    g.rect(x, y + sh, w, sh).fill(0xf3efe6);
+    g.rect(x, y + sh * 2, w, h - sh * 2).fill(0x4a96c8);
   } else {
     const base = hexToInt(getCountryInfo(t).color);
     g.rect(x, y, w, h).fill(base);
