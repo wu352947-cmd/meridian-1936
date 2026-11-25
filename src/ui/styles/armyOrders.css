@@ -1,0 +1,297 @@
+/* Meridian 1936 — Batch 05 Templates, Training Queue, Armies & Bottom-Left Order Capsule */
+
+.army-queue-list,
+.army-tmpl-list,
+.army-list,
+.army-brig-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.army-queue-item,
+.army-tmpl-row,
+.army-item,
+.army-brig-row {
+  background: #201C18;
+  border: 1px solid rgba(110, 93, 66, 0.35);
+  border-radius: 3px;
+  padding: 5px 6px;
+}
+
+.army-item,
+.army-brig-row {
+  cursor: pointer;
+}
+
+.army-item.is-selected,
+.army-brig-row.is-selected {
+  background: rgba(197, 160, 89, 0.16);
+  border-color: #DFB763;
+}
+
+.army-queue-top,
+.army-tmpl-head,
+.army-item-top,
+.army-brig-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.army-queue-name,
+.army-tmpl-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.army-nato-svg {
+  flex-shrink: 0;
+  display: block;
+}
+
+.army-tmpl-name,
+.army-item-name,
+.army-brig-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ui-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.army-role-pill {
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.army-role-pill.frontline {
+  background: rgba(78, 138, 87, 0.25);
+  color: #9DD6A5;
+}
+
+.army-role-pill.support {
+  background: rgba(226, 159, 56, 0.25);
+  color: #F2C97D;
+}
+
+.army-tmpl-stats,
+.army-tmpl-cost,
+.army-queue-meta,
+.army-brig-sub {
+  font-size: 9.5px;
+  color: var(--ui-text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  margin-top: 2px;
+}
+
+.army-tmpl-cost small {
+  color: var(--ui-text-muted);
+  margin-left: 1px;
+}
+
+.army-eq-ok,
+.army-ok {
+  color: #8FC997;
+}
+
+.army-warn {
+  color: #E8A65C;
+}
+
+.army-train-btn {
+  padding: 3px 7px;
+  font-size: 10.5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+  flex-shrink: 0;
+}
+
+.army-train-btn em {
+  font-style: normal;
+  font-size: 9px;
+  color: #E8C77F;
+}
+
+.army-train-btn.is-short {
+  border-color: #B57A36;
+}
+
+.army-mini-btn {
+  padding: 2px 7px;
+  font-size: 10px;
+}
+
+.army-cancel-btn {
+  background: #31211E;
+  color: #E8A298;
+  border: 1px solid rgba(184, 72, 58, 0.55);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.army-prog-track {
+  height: 5px;
+  background: #14110E;
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 4px 0 3px;
+}
+
+.army-prog-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4B8554, #7CC486);
+}
+
+.army-queue-eta {
+  font-size: 10px;
+  color: #E8C77F;
+  margin-left: auto;
+}
+
+.army-color-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.army-cap-pill {
+  font-size: 9.5px;
+  color: #E8C77F;
+  margin-left: auto;
+}
+
+.army-order-status,
+.army-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.army-status-pill {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: #2A241E;
+  color: var(--ui-text-muted);
+}
+
+.army-status-pill.is-front {
+  background: rgba(200, 75, 49, 0.24);
+  color: #F2B5A6;
+}
+
+.army-status-pill.is-arrow {
+  background: rgba(226, 173, 75, 0.22);
+  color: #F4D58F;
+}
+
+.army-brig-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.army-brig-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.army-lock-badge {
+  font-size: 9px;
+  padding: 0 5px;
+  border-radius: 2px;
+  background: #4B391E;
+  border: 1px solid #E2B356;
+  color: #F9E0A0;
+  cursor: pointer;
+}
+
+.army-march-tag {
+  color: #E2B866;
+}
+
+.army-org-str {
+  margin-left: auto;
+}
+
+.army-org-str i {
+  font-style: normal;
+}
+
+.army-org-str .org {
+  color: #6CC77F;
+}
+
+.army-org-str .str {
+  color: #E6A94A;
+}
+
+/* Bottom-left Order Mode Capsule (Desktop + Tablet touch) */
+.order-capsule {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #322820, #201A14);
+  border: 1.5px solid #8A7148;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.48);
+}
+
+.order-cap-btn {
+  padding: 4px 10px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ui-text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.order-cap-btn:hover {
+  color: #FFF4DC;
+  background: rgba(197, 160, 89, 0.14);
+}
+
+.order-cap-btn.active {
+  background: linear-gradient(180deg, #5A472F, #3E301F);
+  border-color: #E2BE74;
+  color: #FFF6DF;
+}
+
+.order-sel-chip {
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(184, 72, 58, 0.28);
+  border: 1px solid #D96B56;
+  color: #FAD4C8;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+/* Lift province card cleanly above the bottom-left order capsule */
+.prov-card {
+  bottom: 62px;
+}

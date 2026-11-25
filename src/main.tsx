@@ -8,6 +8,8 @@ import './ui/styles/industryDrawer.css';
 import './ui/styles/governanceDrawer.css';
 import './ui/styles/techBlueprint.css';
 import './ui/styles/techBlueprintNodes.css';
+import './ui/styles/armyDrawer.css';
+import './ui/styles/armyOrders.css';
 
 import { render } from 'preact';
 import { loadMeridianFonts } from './assets/loadFonts';

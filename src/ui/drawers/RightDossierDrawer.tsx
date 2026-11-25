@@ -10,6 +10,7 @@ import {
   simTickSig,
   type AppActions,
 } from '../store/simStore';
+import { ArmyDrawer } from './ArmyDrawer';
 import { GovernanceDrawer } from './GovernanceDrawer';
 import { IndustryDrawer } from './IndustryDrawer';
 
@@ -93,6 +94,8 @@ export function RightDossierDrawer({ actions, onClose }: Props) {
         <IndustryDrawer actions={actions} />
       ) : tab === 'directives' ? (
         <GovernanceDrawer actions={actions} />
+      ) : tab === 'army' ? (
+        <ArmyDrawer actions={actions} />
       ) : (
       <div class="drawer-body">
         <div class="drawer-stamp-card">

@@ -8,6 +8,7 @@ import { RightDossierDrawer } from './drawers/RightDossierDrawer';
 import { TechBlueprintModal } from './modals/TechBlueprintModal';
 import { BottomCommandDock } from './hud/BottomCommandDock';
 import { DispatchTicker } from './hud/DispatchTicker';
+import { OrderModeCapsule } from './hud/OrderModeCapsule';
 import { TopLeftNationBrief } from './hud/TopLeftNationBrief';
 import { TopRightClockBar } from './hud/TopRightClockBar';
 import {
@@ -179,6 +180,8 @@ export function AppShell({ actions }: Props) {
             onClearSelected={actions.clearSelection}
             actions={actions}
           />
+
+          <OrderModeCapsule actions={actions} />
 
           <BottomCommandDock actions={actions} />
 
