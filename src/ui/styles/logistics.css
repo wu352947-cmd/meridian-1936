@@ -1,6 +1,6 @@
 /* Meridian 1936 — Batch 07 Seasonal Vignette, Clock Season Tag & F5 Logistics Drawer */
 
-/* 4-corner procedural SVG seasonal vignette (strictly outer corners, zero center occlusion) */
+/* 4-corner procedural SVG seasonal vignette (~12-18% reach per corner, fades out cleanly before center) */
 .seasonal-frame-overlay {
   position: fixed;
   inset: 0;
@@ -11,17 +11,17 @@
 
 .season-corner {
   position: fixed;
-  width: 260px;
-  height: 220px;
+  width: clamp(320px, 38vw, 620px);
+  height: clamp(240px, 42vh, 420px);
   pointer-events: none;
 }
 
 .seasonal-frame-overlay.is-winter {
-  box-shadow: inset 0 0 42px rgba(174, 214, 240, 0.24);
+  box-shadow: inset 0 0 68px rgba(192, 226, 248, 0.34);
 }
 
 .seasonal-frame-overlay.is-mud {
-  box-shadow: inset 0 0 38px rgba(96, 70, 42, 0.24);
+  box-shadow: inset 0 0 64px rgba(84, 56, 28, 0.36);
 }
 
 .season-corner.is-tl { top: 0; left: 0; }

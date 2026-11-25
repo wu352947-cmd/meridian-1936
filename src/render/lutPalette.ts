@@ -50,23 +50,34 @@ function lerpRgb(
   ];
 }
 
+function lerpRgb3(
+  low: [number, number, number],
+  mid: [number, number, number],
+  high: [number, number, number],
+  t: number,
+): [number, number, number] {
+  const u = Math.max(0, Math.min(1, t));
+  return u < 0.5 ? lerpRgb(low, mid, u * 2) : lerpRgb(mid, high, (u - 0.5) * 2);
+}
+
 /**
- * Live M3 supply choropleth:
+ * Live M3 supply choropleth with monotonic within-band luminance & next-band hue ramps
+ * (brightest at S=100/79/39 hubs, smoothly darkening & leaning toward the next tier as S falls):
  *  - Standard: Emerald (80-100) -> Amber (40-79) -> Rust Red (1-39) -> Cut-off Dark Crimson (0, hatched)
- *  - Colorblind (Okabe-Ito): Cobalt Blue (80-100) -> Slate Gray (40-79) -> Vermilion Orange (1-39) -> Deep Charcoal (0, hatched)
+ *  - Colorblind (Okabe-Ito): Cerulean/Cobalt (80-100) -> Silver/Warm-Slate (40-79) -> Vermilion Orange (1-39) -> Deep Charcoal (0, hatched)
  */
 function supplyLiveColor(supplyVal: number, colorblind: boolean): [number, number, number] {
   const s = Math.max(0, Math.min(100, supplyVal));
   if (colorblind) {
     if (s === 0) return [30, 38, 50];
-    if (s < 40) return lerpRgb([202, 74, 10], [234, 148, 28], s / 39);
-    if (s < 80) return lerpRgb([204, 194, 174], [148, 166, 180], (s - 40) / 39);
-    return lerpRgb([58, 134, 190], [16, 94, 158], (s - 80) / 20);
+    if (s < 40) return lerpRgb3([144, 52, 14], [206, 98, 22], [240, 152, 52], (s - 1) / 38);
+    if (s < 80) return lerpRgb3([142, 118, 92], [176, 170, 154], [216, 218, 212], (s - 40) / 39);
+    return lerpRgb3([54, 96, 136], [46, 138, 202], [90, 188, 244], (s - 80) / 20);
   }
   if (s === 0) return [52, 20, 20];
-  if (s < 40) return lerpRgb([154, 42, 34], [206, 98, 46], s / 39);
-  if (s < 80) return lerpRgb([214, 136, 48], [210, 186, 86], (s - 40) / 39);
-  return lerpRgb([106, 168, 92], [44, 128, 72], (s - 80) / 20);
+  if (s < 40) return lerpRgb3([108, 30, 28], [164, 58, 44], [208, 96, 62], (s - 1) / 38);
+  if (s < 80) return lerpRgb3([166, 94, 42], [212, 154, 62], [240, 210, 108], (s - 40) / 39);
+  return lerpRgb3([88, 116, 52], [62, 156, 80], [98, 214, 120], (s - 80) / 20);
 }
 
 /** Placeholder air/sea strategic theater preview (Batch 02 preview; full air/navy in Batch 10). */

@@ -32,16 +32,16 @@ const DIPLO_FACTION_LEGEND: Array<{ label: string; color: string; hatch?: boolea
 ];
 
 const SUPPLY_LEGEND_STD: Array<{ label: string; color: string; hatch?: boolean }> = [
-  { label: '充裕 (80–100)', color: '#4E8A57' },
-  { label: '吃紧 (40–79)', color: '#C8933E' },
-  { label: '缺粮 (<40)', color: '#B84736' },
+  { label: '充裕 (80–100)', color: 'linear-gradient(90deg, #62D678, #587434)' },
+  { label: '吃紧 (40–79)', color: 'linear-gradient(90deg, #F0D26C, #A65E2A)' },
+  { label: '缺粮 (<40)', color: 'linear-gradient(90deg, #D0603E, #6C1E1C)' },
   { label: '断粮 (0)', color: '#A82A22', hatch: true },
 ];
 
 const SUPPLY_LEGEND_CB: Array<{ label: string; color: string; hatch?: boolean }> = [
-  { label: '充裕 (80–100)', color: '#1B6CA8' },
-  { label: '吃紧 (40–79)', color: '#8F9AA4' },
-  { label: '缺粮 (<40)', color: '#DE6614' },
+  { label: '充裕 (80–100)', color: 'linear-gradient(90deg, #5ABCF4, #366088)' },
+  { label: '吃紧 (40–79)', color: 'linear-gradient(90deg, #D8DAD4, #8E765C)' },
+  { label: '缺粮 (<40)', color: 'linear-gradient(90deg, #F09834, #90340E)' },
   { label: '断粮 (0)', color: '#DE6614', hatch: true },
 ];
 

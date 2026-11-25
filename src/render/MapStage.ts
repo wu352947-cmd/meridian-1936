@@ -200,7 +200,7 @@ export class MapStage {
     this.pockets = new PocketLayer(this.borders.getDecodedArcs());
     this.labels = new CurvedLabelLayer(this.meta);
     this.industryOverlay = new IndustryOverlayLayer();
-    this.supplyOverlay = new SupplyOverlayLayer();
+    this.supplyOverlay = new SupplyOverlayLayer(this.borders.getDecodedArcs());
     this.counters = new UnitCounterLayer(this.meta);
     this.combatBubbles = new CombatBubbleLayer(this.meta);
 
@@ -208,6 +208,7 @@ export class MapStage {
       mapMesh,
       this.terrainDetails.root,
       this.borders.root,
+      this.supplyOverlay.contourRoot,
       this.frontlines.root,
       this.pockets.root,
       this.labels.root,
@@ -336,7 +337,10 @@ export class MapStage {
     simTick: number,
   ): void {
     this.simTick = simTick;
-    if (supplyByProv) this.supplyByProv = supplyByProv;
+    if (supplyByProv) {
+      this.supplyByProv = supplyByProv;
+      this.supplyOverlay.updateContours(supplyByProv, this.controllerByProv);
+    }
     if (hubs) this.supplyOverlay.rebuildHubs(hubs, this.playerTag);
     this.refreshLuts();
   }
@@ -381,6 +385,7 @@ export class MapStage {
     if (combat) {
       this.controllerByProv = new Map(combat.occupiedProvinces.map((o) => [o.provId, o.controller]));
       for (const pk of combat.pockets) for (const pid of pk.provinceIds) pocketProvs.add(pid);
+      this.supplyOverlay.updateContours(this.supplyByProv, this.controllerByProv);
       this.refreshLuts();
       this.counters.setDiplomacyContext(this.playerTag, combat.wars);
       this.pockets.setData(combat.pockets);

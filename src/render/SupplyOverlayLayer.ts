@@ -12,7 +12,42 @@ import {
 } from '../assets/icons/logisticsIcons';
 import type { ActiveSupplyHubSnap } from '../sim/systems/supplyTypes';
 import type { MapMode } from '../types/map';
+import type { DecodedArc } from './BorderMeshBuilder';
 import type { ViewportRect } from './CurvedLabelLayer';
+
+function drawDashedIsoline(g: Graphics, pts: readonly [number, number][], dashLen: number, gapLen: number): void {
+  if (pts.length < 2) return;
+  let draw = true;
+  let rem = dashLen;
+  let px = pts[0]![0];
+  let py = pts[0]![1];
+
+  for (let i = 1; i < pts.length; i++) {
+    const nx = pts[i]![0];
+    const ny = pts[i]![1];
+    const dx = nx - px;
+    const dy = ny - py;
+    let segLen = Math.hypot(dx, dy);
+    if (segLen < 0.05) continue;
+    const ux = dx / segLen;
+    const uy = dy / segLen;
+
+    while (segLen > 0) {
+      const step = Math.min(rem, segLen);
+      const ex = px + ux * step;
+      const ey = py + uy * step;
+      if (draw) g.moveTo(px, py).lineTo(ex, ey);
+      px = ex;
+      py = ey;
+      segLen -= step;
+      rem -= step;
+      if (rem <= 0.05) {
+        draw = !draw;
+        rem = draw ? dashLen : gapLen;
+      }
+    }
+  }
+}
 
 interface HubNode {
   provId: number;
@@ -34,14 +69,81 @@ const BADGE_STYLE = new TextStyle({
 
 export class SupplyOverlayLayer {
   readonly root = new Container();
+  readonly contourRoot = new Container();
+  private readonly contourG = new Graphics();
+  private readonly arcs: readonly DecodedArc[];
   private nodes: HubNode[] = [];
+  private contourArcs80: Array<[number, number][]> = [];
+  private contourArcs40: Array<[number, number][]> = [];
   private mapMode: MapMode = 'political';
   private lastZoom = 1;
+  private lastContourZoom = -1;
   private lastView: ViewportRect | undefined;
+
+  constructor(arcs: readonly DecodedArc[] = []) {
+    this.arcs = arcs;
+    this.contourRoot.addChild(this.contourG);
+    this.contourRoot.visible = false;
+  }
 
   setMapMode(mode: MapMode): void {
     this.mapMode = mode;
     this.updateLod(this.lastZoom, this.lastView);
+  }
+
+  /** Extract internal land boundaries where supply crosses S=80 or S=40 for delicate pencil isolines. */
+  updateContours(supplyByProv: Uint8Array | null, controllerByProv?: ReadonlyMap<number, string>): void {
+    this.contourArcs80 = [];
+    this.contourArcs40 = [];
+    if (supplyByProv && this.arcs.length > 0) {
+      for (const arc of this.arcs) {
+        if (arc.points.length < 2 || arc.hasSea || !arc.hasLand || arc.owners.size > 1 || arc.provIds.size !== 2) {
+          continue;
+        }
+        let idA = -1;
+        let idB = -1;
+        for (const pid of arc.provIds) {
+          if (idA < 0) idA = pid;
+          else idB = pid;
+        }
+        if (idA < 0 || idB < 0 || idA >= supplyByProv.length || idB >= supplyByProv.length) continue;
+        if (controllerByProv) {
+          const cA = controllerByProv.get(idA);
+          const cB = controllerByProv.get(idB);
+          if (cA !== cB) continue;
+        }
+        const sA = supplyByProv[idA]!;
+        const sB = supplyByProv[idB]!;
+        if (sA === 0 || sB === 0) continue;
+        const cross40 = (sA >= 40) !== (sB >= 40);
+        const cross80 = (sA >= 80) !== (sB >= 80);
+        if (cross40) this.contourArcs40.push(arc.points);
+        else if (cross80) this.contourArcs80.push(arc.points);
+      }
+    }
+    this.lastContourZoom = -1;
+    this.redrawContours(this.lastZoom);
+  }
+
+  private redrawContours(zoom: number): void {
+    this.contourG.clear();
+    if (this.mapMode !== 'supply') return;
+    if (this.contourArcs80.length === 0 && this.contourArcs40.length === 0) return;
+
+    const s = 1 / Math.pow(Math.max(0.55, zoom), 0.55);
+    if (this.contourArcs80.length > 0) {
+      for (const pts of this.contourArcs80) drawDashedIsoline(this.contourG, pts, 9.5 * s, 4.8 * s);
+      this.contourG.stroke({ width: 2.4 * s, color: 0xf4ecd8, alpha: 0.28, cap: 'round' });
+      for (const pts of this.contourArcs80) drawDashedIsoline(this.contourG, pts, 9.5 * s, 4.8 * s);
+      this.contourG.stroke({ width: 1.35 * s, color: 0x2d2923, alpha: 0.64, cap: 'round' });
+    }
+    if (this.contourArcs40.length > 0) {
+      for (const pts of this.contourArcs40) drawDashedIsoline(this.contourG, pts, 5.5 * s, 3.6 * s);
+      this.contourG.stroke({ width: 2.6 * s, color: 0xf5e8d2, alpha: 0.30, cap: 'round' });
+      for (const pts of this.contourArcs40) drawDashedIsoline(this.contourG, pts, 5.5 * s, 3.6 * s);
+      this.contourG.stroke({ width: 1.55 * s, color: 0x241d18, alpha: 0.74, cap: 'round' });
+    }
+    this.lastContourZoom = zoom;
   }
 
   rebuildHubs(hubs: readonly ActiveSupplyHubSnap[], playerTag: string): void {
@@ -119,7 +221,11 @@ export class SupplyOverlayLayer {
     this.lastView = view;
     const active = this.mapMode === 'supply';
     this.root.visible = active;
+    this.contourRoot.visible = active;
     if (!active) return;
+    if (Math.abs(zoom - this.lastContourZoom) > 0.04) {
+      this.redrawContours(zoom);
+    }
 
     const invScale = 1 / Math.max(0.45, zoom);
     const scale = Math.max(0.24, Math.min(1.15, invScale * 0.95));

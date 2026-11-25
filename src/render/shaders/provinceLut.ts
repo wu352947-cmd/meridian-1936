@@ -167,11 +167,11 @@ void main() {
     hillStrength = 0.28;
     multiplyMix = 0.52;
   } else if (uMode > 1.5 && uMode < 2.5) {
-    // M3 Supply lens: rich cartographic choropleth separation (emerald -> amber -> rust) while keeping relief legible
-    reliefBase = clamp((relief - 0.50) * 1.18 + 0.56, 0.0, 1.0);
-    baseAlpha = mix(0.66, 0.84, borderBand);
-    hillStrength = 0.24;
-    multiplyMix = 0.42;
+    // M3 Supply lens: smooth monotonic choropleth gradient from hubs outward without border wash flattening
+    reliefBase = clamp((relief - 0.50) * 1.06 + 0.58, 0.0, 1.0);
+    baseAlpha = mix(0.78, 0.83, borderBand);
+    hillStrength = 0.20;
+    multiplyMix = 0.34;
   } else if (uMode >= 2.5) {
     // Diplomacy & industry modes: crisp thematic choropleth clarity while preserving relief depth
     reliefBase = clamp((relief - 0.52) * 1.24 + 0.54, 0.0, 1.0);
@@ -210,29 +210,36 @@ void main() {
   float provJitter = fract(sin(provId * 127.1 + 311.7) * 43758.5453) - 0.5;
   float jitterAmt = mix(0.012, 0.046, smoothstep(0.95, 2.25, uZoom));
   if (uMode > 0.5 && uMode < 1.5) jitterAmt *= 0.55;
+  if (uMode > 1.5 && uMode < 2.5) jitterAmt *= 0.28;
   col *= (1.0 + provJitter * jitterAmt);
 
-  // Restrained regional seasonal tint in affected climate zones (cold frost blue / warm mud umber)
+  // Visible yet legible regional seasonal wash in affected climate zones (cold frost blue-grey / damp mud umber)
+  bool isSupplyMode = uMode > 1.5 && uMode < 2.5;
   if (weatherCode > 0.5 && weatherCode < 1.5) {
-    float frostGrain = vnoise(mapPos * 0.085) * 0.5 + vnoise(mapPos * 0.24) * 0.5;
-    float winterAmt = (uMode > 1.5 && uMode < 2.5) ? 0.11 : 0.17;
-    col = mix(col, vec3(0.76, 0.85, 0.93), winterAmt + (frostGrain - 0.5) * 0.04);
+    float frostDrift = vnoise(mapPos * 0.022) * 0.55 + vnoise(mapPos * 0.095) * 0.45;
+    float frostFine = vnoise(mapPos * 0.26);
+    float colLuma = dot(col, vec3(0.299, 0.587, 0.114));
+    vec3 cooled = mix(col, vec3(colLuma) * vec3(0.88, 0.95, 1.04), isSupplyMode ? 0.16 : 0.30);
+    float winterAmt = isSupplyMode ? 0.25 : 0.34;
+    col = mix(cooled, vec3(0.75, 0.84, 0.93), clamp(winterAmt + (frostDrift - 0.5) * 0.09 + (frostFine - 0.5) * 0.04, 0.14, 0.44));
   } else if (weatherCode >= 1.5 && weatherCode < 2.5) {
-    float siltGrain = vnoise(mapPos * 0.075) * 0.55 + vnoise(mapPos * 0.20) * 0.45;
-    float mudAmt = (uMode > 1.5 && uMode < 2.5) ? 0.10 : 0.19;
-    col = mix(col, vec3(0.45, 0.36, 0.25), mudAmt + (siltGrain - 0.5) * 0.05);
+    float mudPatch = vnoise(mapPos * 0.024) * 0.56 + vnoise(mapPos * 0.088) * 0.44;
+    float siltFine = vnoise(mapPos * 0.22);
+    vec3 dampBase = col * (isSupplyMode ? vec3(0.96, 0.93, 0.87) : vec3(0.92, 0.87, 0.79));
+    float mudAmt = isSupplyMode ? 0.22 : 0.37;
+    col = mix(dampBase, vec3(0.39, 0.28, 0.17), clamp(mudAmt + (mudPatch - 0.5) * 0.12 + (siltFine - 0.5) * 0.05, 0.14, 0.48));
   }
 
   // M3 Supply cut-off (S=0): screen-pixel-space black-red (or navy-orange CB) diagonal hatching (zero Moire)
-  if (isSupplyZero && uMode > 1.5 && uMode < 2.5) {
+  if (isSupplyZero && isSupplyMode) {
     float supStripe = step(mod(gl_FragCoord.x + gl_FragCoord.y, 10.0), 4.0);
     vec3 darkStripe = uColorblind > 0.5 ? vec3(0.09, 0.12, 0.17) : vec3(0.11, 0.07, 0.07);
     vec3 alertStripe = uColorblind > 0.5 ? vec3(0.87, 0.40, 0.08) : vec3(0.69, 0.17, 0.14);
     col = mix(darkStripe, alertStripe, supStripe);
   }
 
-  // Subtle ink darkening right along the inner international frontier
-  col *= (1.0 - edgeNear * 0.075);
+  // Subtle ink darkening right along the inner international frontier (softer in supply mode to preserve gradient)
+  col *= (1.0 - edgeNear * (isSupplyMode ? 0.03 : 0.075));
 
   // Selected country: ultra-subtle warm presence (NO heavy red wash on other provinces!)
   if (isSelCountry && !isSelProv) {
